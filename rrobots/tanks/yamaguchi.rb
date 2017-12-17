@@ -1,6 +1,8 @@
 require 'rrobots'
 require 'matrix'
 
+require 'logger'
+
 class Yamaguchi
   include Robot
 
@@ -10,27 +12,68 @@ class Yamaguchi
   MAX_ROBO_SPEED = 8
   MIN_ROBO_SPEED = -8
 
-  AWAY_THRESHOLD = 400
-  ABOID_WALL_THRESHOLD = 92
+  def initialize
+    @logg = Logger.new(STDOUT)
+    @attack_strategy ||= {
+      direct: {tries: 10, hit: 0},
+      uniform_acceleration: {tries: 10, hit: 0},
+      # right: 1,
+      # left: 1
+    }
+  end
 
   def tick(events)
+    @got_hit_log = {} if time == 0
     @log_by_robo = {} if time == 0
     @targets = [] if time == 0
-    search_enemies
+    if @will_fire and num_robots > 1
+      @will_fire = false
+      @size_of_bullet = (@log_by_robo[@aim].last[:energy] > 20 ? 3 : @log_by_robo[@aim].last[:energy]/3.3 - 0.1)
+      if @size_of_bullet < 1
+        @fire_at = time
+        fire @size_of_bullet if time - @fire_at > 60
+      else
+        if @size_of_bullet == 3 and @attack_strategy.values.map{ |value| value[:hit] }.inject(:+) <= 20
+          @size_of_bullet = 0.1
+        elsif @long_distance
+          @size_of_bullet = 1.5
+        end
+        fire @size_of_bullet
+      end
+    end
+    get_enemies_info
+    @turn_radar_direction = round_whithin_range @turn_radar_direction, -60..60
     set_run_params
-    set_aim
-    attack
+    @turn_direction = round_whithin_range @turn_direction, -10..10
+    set_attack_params
     turn @turn_direction
     turn_gun @turn_gun_direction
-    turn_radar @scan_direction
+    if @adjust_radar
+      @turn_radar_direction -= @turn_direction
+      @turn_radar_direction -= @turn_gun_direction
+      @adjust_radar = false
+    end
+    turn_radar optimize_angle optimize_angle @turn_radar_direction
     accelerate @acceleration
   end
 
-  def search_enemies
-    @scan_direction ||= MAX_ANGLE_OF_RADAR
+  def get_enemies_info
+    @turn_radar_direction ||= MAX_ANGLE_OF_RADAR
     @turn_gun_direction ||= MAX_ANGLE_OF_RUN
+    unless events['got_hit'].empty?
+      @got_hit_log[events['got_hit'].first[:from]] ||= []
+      @got_hit_log[events['got_hit'].first[:from]].delete_if { |hit_time| time - hit_time > 60 }
+      @got_hit_log[events['got_hit'].first[:from]] << time
+      @emergency = events['got_hit'].first[:from] if @got_hit_log[events['got_hit'].first[:from]].size
+    end
+    unless events['hit'].empty?
+      if expected = @expected_hits.select { |expected_hit| (time - expected_hit[:time]).abs < 3 }.first
+        @attack_strategy[expected[:strategy]][:hit] += 1
+      end
+    end
+    @singular_points = {} if time == 0
     if events['robot_scanned'].empty?
-      @scan_direction = (0 < @scan_direction ? 1 : -1) * MAX_ANGLE_OF_RADAR
+      @turn_radar_direction = (0 < @turn_radar_direction ? 1 : -1) * MAX_ANGLE_OF_RADAR
     else
       events['robot_scanned'].each do |robot_scanned|
         @log_by_robo[robot_scanned[:name]] ||=  []
@@ -59,150 +102,172 @@ class Yamaguchi
             end
           end
         end
+        if @log_by_robo[robot_scanned[:name]].size > 3
+          @singular_points[robot_scanned[:name]] ||= []
+          @singular_points[robot_scanned[:name]] << @log_by_robo[robot_scanned[:name]].select { |log|
+            log[:x].round == @log_by_robo[robot_scanned[:name]].last[:x].round and log[:y].round == @log_by_robo[robot_scanned[:name]].last[:y].round and log[:x_speed]&.round == @log_by_robo[robot_scanned[:name]].last[:x_speed]&.round and log[:y_speed]&.round == @log_by_robo[robot_scanned[:name]].last[:y_speed]&.round and !(log[:x_speed].round == 0 and log[:y_speed].round == 0)
+          }
+        end
       end
-      diff_radar_direction = events['robot_scanned'].min_by { |log| log[:distance] }[:direction] - radar_heading
-      @scan_direction = optimize_angle(diff_radar_direction) * 2
+      if num_robots > 2 and (55..59).cover? time % 60
+        @turn_radar_direction = (0 < @turn_radar_direction ? 1 : -1) * MAX_ANGLE_OF_RADAR
+      else
+        diff_radar_direction = events['robot_scanned'].min_by { |log| log[:distance] }[:direction] - radar_heading
+        @turn_radar_direction = optimize_angle(diff_radar_direction) * 2
+        @adjust_radar = true
+      end
     end
-    @scan_direction = MAX_ANGLE_OF_RADAR if num_robots > 2 and (54..59).cover?(time % 60)
   end
 
   def set_run_params
     @turn_direction ||= 0
     @acceleration ||= 1
     @progress_direction ||= 1
-    @enemy_stop_at ||= {}
-    @log_by_robo.delete_if { |name, logs| 300 < time - logs.last[:time] }
+    @gravity_points ||= {}
+    @x_gravity = 0
+    @y_gravity = 0
     return if @log_by_robo.empty?
-    recent_logs = @log_by_robo.map { |name, logs| (time - logs.last[:time]) < 10 ? logs.last : nil }.compact
-    return if recent_logs.empty?
-    recent_logs.each do |log|
+    @recent_logs = @log_by_robo.map { |name, logs| (time - logs.last[:time]) < 6 ? logs.last : nil }.compact
+    return if @recent_logs.empty?
+    @recent_logs.each do |log|
       hit_bonus = 0
       next if log.size < 10
-      got_hit = events['got_hit'].select {|hit_log| hit_log[:from] == log[:name]}.first
+      got_hit = events['got_hit'].select { |hit_log| hit_log[:from] == log[:name] }.first
       hit_bonus = got_hit[:damage] * 2/3 if got_hit
-      @duration += 20 if @duration - time < 20 and  (0.1..3).cover? @log_by_robo[log[:name]][-2][:energy] - log[:energy] + hit_bonus
-    end
-    close_enemy = recent_logs.min_by { |log| log[:distance] }
-    counter_angle = 90
-    near_enemy = ( 800 > close_enemy[:distance] ? 1 : -1 )
-    near_enemy *= @progress_direction
-    counter_angle += (10 * near_enemy)
-    @enemy_stop_at[close_enemy[:name]] ||= time if close_enemy[:energy] < 1
-    counter_angle = 0 if @enemy_stop_at[close_enemy[:name]] and time - @enemy_stop_at[close_enemy[:name]] > 50 and @log_by_robo[close_enemy[:name]][-10] and @log_by_robo[close_enemy[:name]][-10][:energy] < 1
-    direction = diff_direction( {x: x, y: (battlefield_height - y)}, {x: close_enemy[:x], y: close_enemy[:y]} ) - heading - counter_angle
-    @turn_direction = optimize_angle(direction)
-    @acceleration = @progress_direction
-    @acceleration = 1 if close_enemy[:energy] < 1 and @log_by_robo[close_enemy[:name]][-10] and @log_by_robo[close_enemy[:name]][-10][:energy] < 1
-    @progress_direction *= -1 unless events[:crash_into_wall].empty?
-
-    if Math::hypot(x - close_enemy[:x], (battlefield_height - y) - close_enemy[:y]) < AWAY_THRESHOLD and close_enemy[:energy] > 1 and close_enemy[:heading]
-      @turn_direction = diff_direction( {x: x, y: (battlefield_height - y)}, {x: close_enemy[:x], y: close_enemy[:y]} ) - heading
-      if x < ABOID_WALL_THRESHOLD or x > battlefield_height - ABOID_WALL_THRESHOLD or y < ABOID_WALL_THRESHOLD or y > battlefield_height - ABOID_WALL_THRESHOLD
-        @acceleration = 1
-      else
-        @acceleration = -1
+      if (0.1..3).cover? @log_by_robo[log[:name]][-2][:energy] - log[:energy] + hit_bonus
+        t = log[:distance] / BULLET_SPEED
+        @gravity_points[time] = {
+          x: x + speed * Math::cos(heading.to_rad) * t,
+          y: y + speed * Math::sin(heading.to_rad) * t,
+          power: 20,
+          expire: time + t
+        }
       end
-      turn_gun_direction = diff_direction( {x: x, y: (battlefield_height - y)}, {x: close_enemy[:x], y: close_enemy[:y]} ) - gun_heading
-      turn_gun_direction = optimize_angle(turn_gun_direction)
-      turn_gun_direction += (turn_gun_direction * @turn_direction > 1 ? @turn_direction : -@turn_direction)
-      @turn_gun_direction = turn_gun_direction
-      @duration = time
-      @brain_muscle = true
-      return
     end
-
-    @duration ||= 0
-    if time - @duration > 0
-      @progress_direction *= -1
-      @duration = time + 10
+    @log_by_robo.each do |name, logs|
+      @gravity_points[name] = {
+        x: logs.last[:x],
+        y: logs.last[:y],
+        power: 10,
+        expire: logs.last[:time] + 60
+      }
+    end
+    if @size_of_bullet and @size_of_bullet < 0
+      @gravity_points[@aim] = {
+        x: @log_by_robo[@aim].last[:x],
+        y: @log_by_robo[@aim].last[:y],
+        power: -20,
+        expire: time + 60
+      }
+    end
+    @gravity_points[:top_wall] = {
+        x: x,
+        y: battlefield_height,
+        power: 10,
+        expire: time + 1
+      }
+    @gravity_points[:bottom_wall] = {
+        x: x,
+        y: 0,
+        power: 10,
+        expire: time + 1
+      }
+    @gravity_points[:left_wall] = {
+        x: 0,
+        y: battlefield_height - y,
+        power: 10,
+        expire: time + 1
+      }
+    @gravity_points[:right_wall] = {
+        x: battlefield_width,
+        y: battlefield_height - y,
+        power: 10,
+        expire: time + 1
+      }
+    @gravity_points.each do |name, gravity|
+      next if gravity[:expire] < time
+      distance = Math::hypot(gravity[:x] - x, gravity[:y] - (battlefield_height - y))
+      direction = diff_direction({x: gravity[:x], y: gravity[:y]}, {x: x, y: (battlefield_height - y)})
+      @x_gravity += (gravity[:power] * Math.cos(direction.to_rad)) / distance ** 2
+      @y_gravity += (gravity[:power] * Math.sin(direction.to_rad)) / distance ** 2
+    end
+    @turn_direction = optimize_angle(diff_direction({x:0, y:0}, {x:@x_gravity, y:@y_gravity}) - heading)
+    if 90 < @turn_direction.abs
+      @acceleration = -1
+      @turn_direction += (0 < @turn_direction ? -180 : 180)
+    else
+      @acceleration = 1
     end
   end
 
-  def set_aim
-    if @brain_muscle
-      fire 3 if @turn_gun_direction.abs <= 30
-      @brain_muscle = false
-      return
-    end
-    @singular_points = {}
-    @log_by_robo.each do |name, robo_log|
-      next if robo_log.size < 4
-      @singular_points[name] = robo_log.select do |log|
-        log[:x].round == robo_log.last[:x].round and log[:y].round == robo_log.last[:y].round and log[:x_speed]&.round == robo_log.last[:x_speed]&.round and log[:y_speed]&.round == robo_log.last[:y_speed]&.round and !(log[:x_speed].round == 0 and log[:y_speed].round == 0)
-      end
-    end
+  def set_attack_params
+    @expected_hits ||= []
+    @long_distance = false
     @singular_points.each do |name, singular_point|
-      next if singular_point.size < 2
-      @targets << {
-        name: name,
-        time: time,
-        hit_time: time + (singular_point.last[:time] - singular_point[-2][:time]),
-        x: singular_point.last[:x],
-        y: singular_point.last[:y],
-        singular: true
-      }
-      return
+      singular_point.each do |point|
+        next if point.size < 3
+        distance = Math::hypot(x - point.last[:x], (battlefield_height - y) - point.last[:y])
+        time_to_be_hit = time + (distance / BULLET_SPEED)
+        1.upto(point.size - 1) do |index|
+          if (time_to_be_hit - (point[index][:time] * 2 - point[index - 1][:time])).abs < 2
+            @turn_gun_direction = diff_direction( {x: x, y: battlefield_height - y}, {x: point.last[:x], y: point.last[:y]} ) - gun_heading
+            @turn_gun_direction += (@turn_gun_direction * @turn_direction > 0 ? @turn_direction : -@turn_direction)
+            @turn_gun_direction = optimize_angle @turn_gun_direction
+            if @turn_gun_direction.abs <= 30
+              @will_fire = true
+              @aim = name
+              return
+            end
+          end
+        end
+      end
     end
     target = @log_by_robo.map { |name, logs| time == logs.last[:time] ? logs.last : nil }.compact.min_by { |log| log[:distance] }
     return if !target or @log_by_robo[target[:name]].size < 4
-    robo_log = @log_by_robo[target[:name]]
-    time_to_be_hit = 25 + robo_log.last[:distance] / BULLET_SPEED
-    nextx = calc_spot(robo_log.last[:x], robo_log.last[:x_speed], robo_log.last[:x_acceleration], time_to_be_hit)
-    nexty = calc_spot(robo_log.last[:y], robo_log.last[:y_speed], robo_log.last[:y_acceleration], time_to_be_hit)
-    if robo_log.last[:radius] and robo_log[-2][:radius] and (robo_log.last[:radius] - robo_log[-2][:radius]).abs < 100
-      nextx = robo_log.last[:x] + robo_log.last[:radius] * Math.cos(robo_log.last[:angle_to_circle].to_rad + robo_log.last[:angular_speed].to_rad * time_to_be_hit) - robo_log.last[:radius] * Math.cos(robo_log.last[:angle_to_circle].to_rad)
-      nexty = robo_log.last[:y] + robo_log.last[:radius] * Math.sin(robo_log.last[:angle_to_circle].to_rad + robo_log.last[:angular_speed].to_rad * time_to_be_hit) - robo_log.last[:radius] * Math.sin(robo_log.last[:angle_to_circle].to_rad)
+    strategy = @attack_strategy.map { |strategy, score|
+      score[:hit] += 0.1
+      {strategy: strategy, hit_ratio: (score[:hit] / score[:tries] * rand)}
+    }.sort{ |a,b| b[:hit_ratio] - a[:hit_ratio]}.first[:strategy]
+    direction = diff_direction( {x: target[:x], y: target[:y]}, {x: x, y: battlefield_height - y} )
+    if strategy == :uniform_acceleration
+      now_distance = Math::hypot(x - target[:x], (battlefield_height - y) - target[:y])
+      x_run_away_point_after_tick = calc_spot(target[:x], target[:x_speed], target[:x_acceleration], 30)
+      y_run_away_point_after_tick = calc_spot(target[:y], target[:y_speed], target[:y_acceleration], 30)
+      run_away_by_tick = (now_distance - Math::hypot(x - x_run_away_point_after_tick, (battlefield_height - y) - y_run_away_point_after_tick)) / 30
+      time_to_be_hit = target[:distance] / (BULLET_SPEED + run_away_by_tick)
+      nextx = calc_spot(target[:x], target[:x_speed], target[:x_acceleration], time_to_be_hit)
+      nexty = calc_spot(target[:y], target[:y_speed], target[:y_acceleration], time_to_be_hit)
+      @expected_hits << {time: time + time_to_be_hit, strategy: strategy}
+    elsif strategy == :direct
+      nextx = target[:x]
+      nexty = target[:y]
+      @expected_hits << {time: time + target[:distance] / (BULLET_SPEED), strategy: strategy}
     end
-    return if 0 > nextx or battlefield_height < nextx or 0 > nexty or battlefield_width < nexty
-    @targets << {
-      name: target[:name],
-      time: time,
-      hit_time: time + time_to_be_hit,
-      x: nextx,
-      y: nexty,
-      x_acceleration: robo_log.last[:x_acceleration],
-      y_acceleration: robo_log.last[:y_acceleration],
-    }
-  end
-
-  def attack
-    @targets.delete_if { |target| !@log_by_robo.keys.include?(target[:name]) }
-    @next_aim = nil if @next_aim and !@log_by_robo.keys.include?(@next_aim[:name])
-    @next_aim ||= @targets.last unless @targets.empty?
-    return unless @next_aim
-    if !@next_aim[:singular] and \
-      (@next_aim[:x_acceleration] * @log_by_robo[@next_aim[:name]].last[:x_acceleration] < 0 or \
-       @next_aim[:y_acceleration] * @log_by_robo[@next_aim[:name]].last[:y_acceleration] < 0 or \
-       (@next_aim[:x_acceleration] + @log_by_robo[@next_aim[:name]].last[:x_acceleration] != 0 and @next_aim[:x_acceleration] * @log_by_robo[@next_aim[:name]].last[:x_acceleration] == 0) or \
-       (@next_aim[:y_acceleration] + @log_by_robo[@next_aim[:name]].last[:y_acceleration] != 0 and @next_aim[:y_acceleration] * @log_by_robo[@next_aim[:name]].last[:y_acceleration] == 0)
-      )
-      @next_aim = nil
-      return
-    end
-    x_future = x + speed * Math::cos(heading.to_rad)
-    y_future = (battlefield_height - y) + speed * Math::sin(heading.to_rad)
-    turn_gun_direction = diff_direction( {x: x_future, y: y_future}, {x: @next_aim[:x], y: @next_aim[:y]} ) - gun_heading
-    turn_gun_direction = optimize_angle(turn_gun_direction)
-    turn_gun_direction += (turn_gun_direction * @turn_direction > 1 ? @turn_direction : -@turn_direction)
-    @turn_gun_direction = turn_gun_direction
-    bullet_duration = Math::hypot(x_future - @next_aim[:x], y_future - @next_aim[:y]) / BULLET_SPEED
-    if @next_aim[:hit_time] - (time + bullet_duration) < -2
-      @next_aim = nil
-    else
-      if turn_gun_direction.abs <= 30 and @next_aim[:hit_time] - (time + bullet_duration) < 1
-        forecast_x = calc_spot(@log_by_robo[@next_aim[:name]].last[:x], @log_by_robo[@next_aim[:name]].last[:x_speed], @log_by_robo[@next_aim[:name]].last[:x_acceleration], bullet_duration)
-        forecast_y = calc_spot(@log_by_robo[@next_aim[:name]].last[:y], @log_by_robo[@next_aim[:name]].last[:y_speed], @log_by_robo[@next_aim[:name]].last[:y_acceleration], bullet_duration)
-        if @log_by_robo[@next_aim[:name]].last[:radius] and @log_by_robo[@next_aim[:name]][-2][:radius] and (@log_by_robo[@next_aim[:name]].last[:radius] - @log_by_robo[@next_aim[:name]][-2][:radius]).abs < 100
-          forecast_x = @log_by_robo[@next_aim[:name]].last[:x] + @log_by_robo[@next_aim[:name]].last[:radius] * Math.cos(@log_by_robo[@next_aim[:name]].last[:angle_to_circle].to_rad + @log_by_robo[@next_aim[:name]].last[:angular_speed].to_rad * bullet_duration) - @log_by_robo[@next_aim[:name]].last[:radius] * Math.cos(@log_by_robo[@next_aim[:name]].last[:angle_to_circle].to_rad)
-          forecast_y = @log_by_robo[@next_aim[:name]].last[:y] + @log_by_robo[@next_aim[:name]].last[:radius] * Math.sin(@log_by_robo[@next_aim[:name]].last[:angle_to_circle].to_rad + @log_by_robo[@next_aim[:name]].last[:angular_speed].to_rad * bullet_duration) - @log_by_robo[@next_aim[:name]].last[:radius] * Math.sin(@log_by_robo[@next_aim[:name]].last[:angle_to_circle].to_rad)
-        end
-        fire (@log_by_robo[@next_aim[:name]].last[:energy] > 20 ? 3 : @log_by_robo[@next_aim[:name]].last[:energy]/3.3 - 0.5) if num_robots > 1 and (@next_aim[:singular] or ((forecast_x - @next_aim[:x]).abs < 100 and (forecast_y - @next_aim[:y]).abs < 100))
-        @next_aim = nil
-      end
+    # elsif strategy == :right
+    #   direction += 90
+    #   direction -= 360 if direction > 360
+    #   nextx = target[:x] + 240 * Math.cos(direction.to_rad)
+    #   nexty = target[:y] - 240 * Math.sin(direction.to_rad)
+    # elsif strategy == :left
+    #   direction -= 90
+    #   direction += 360 if direction < 0
+    #   nextx = target[:x] + 240 * Math.cos(direction.to_rad)
+    #   nexty = target[:y] - 240 * Math.sin(direction.to_rad)
+    # end
+    @turn_gun_direction = diff_direction( {x: x, y: battlefield_height - y}, {x: nextx, y: nexty} ) - gun_heading
+    @turn_gun_direction -= @turn_direction
+    @turn_gun_direction = optimize_angle @turn_gun_direction
+    if @turn_gun_direction.abs <= 30
+      @will_fire = true
+      @long_distance = target[:distance] > 600
+      @aim = target[:name]
     end
   end
 
   def diff_direction(observation, target)
+    if target[:x] == observation[:x]
+      return target[:y] - observation[:y] > 0 ? 90 : 270
+    end
     direction = to_angle(Math::atan( (target[:y] - observation[:y]) / (target[:x] - observation[:x]) ))
     direction += 180 if (target[:x] - observation[:x]) < 0
     direction += 360 if direction < 0

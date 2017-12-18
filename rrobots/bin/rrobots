@@ -7,7 +7,7 @@ class OptionsParser
   def self.parse!(args)
     options = OpenStruct.new
     options.resolution  = [800,800]
-    options.match = Time.now.to_i + Process.pid
+    options.match = 1
     options.gui = true
     options.timeout = 5000
     options.teams = []

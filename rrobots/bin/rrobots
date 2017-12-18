@@ -245,8 +245,8 @@ def score(result)
     friend_kills: result[:friend_kills] * -50,
     bullet_damage_given: result[:bullet_damage_given] * 2,
     friend_bullet_damage_given: result[:friend_bullet_damage_given] * -2,
-    ram_damage_given: result[:ram_damage_given] * 1,
-    friend_ram_damage_given: result[:friend_ram_damage_given] * -0.5,
+    ram_damage_given: result[:ram_damage_given] * 0,
+    friend_ram_damage_given: result[:friend_ram_damage_given] * -1,
     ram_kills: result[:ram_kills] * 100,
     friend_ram_kills: result[:friend_ram_kills] * -100,
   }

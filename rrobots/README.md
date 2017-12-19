@@ -170,7 +170,7 @@ ex > export MY_ROBOT=tanks/my_robot.rb
 
 ## Team(2000x2000)
 ```
-999. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=2000,2000 $MY_ROBOT $MY_ROBOT1 $MY_ROBOT2 tanks/kubota_advance tanks/kubota_advance_bot tanks/kubota_advance_bot --teams=3 --no-gui
+999. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=2000,2000 $MY_ROBOT $MY_ROBOT1 $MY_ROBOT2 tanks/kubota_advance tanks/kubota/kubota_advance_bot tanks/kubota/kubota_advance_bot --teams=3 --no-gui
 ```
 
 

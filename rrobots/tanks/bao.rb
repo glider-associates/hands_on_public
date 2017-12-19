@@ -332,7 +332,7 @@ class Bao
         end
       end
     end
-    pp "now gun_heading: #{gun_heading} next should be: #{gun_heading + @turn_gun_degree}"
+    # pp "now gun_heading: #{gun_heading} next should be: #{gun_heading + @turn_gun_degree}"
 
     #draw_line gun_heading + @turn_gun_degree, :red
     turn_gun @turn_gun_degree

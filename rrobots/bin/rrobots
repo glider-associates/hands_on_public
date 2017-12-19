@@ -385,9 +385,8 @@ else
   end
 end
 
-def print_league_result(summary_by_name)
+def print_league_result(summary_by_name, robot_names)
   offset = 0
-  robot_names = summary_by_name.keys
   lines = Array.new(robot_names.length + 2){''}
   vertical_format lines[0], offset, ""
   vertical_format lines[1], offset, "------------------------"
@@ -395,7 +394,8 @@ def print_league_result(summary_by_name)
     vertical_format lines[index + 2], offset, "#{name}"
   end
   offset += 20
-  summary_by_name.each do |name, summary_by_key|
+  robot_names.each_with_index do |name|
+    summary_by_key = summary_by_name[name]
     vertical_format lines[0], offset, "| #{name}"
     vertical_format lines[1], offset, "+-----------------------"
     robot_names.each_with_index do |key, index|
@@ -420,12 +420,14 @@ def print_league_result(summary_by_name)
 end
 
 if options.teams.length == 0
-  print_results('=== Finally ===', nil, summary.values.select{|a| !a[:name].start_with? 'Team_'}.sort{|a, b| b[:score] <=> a[:score]}, nil, true)
+  results_order_by_score = summary.values.select{|a| !a[:name].start_with? 'Team_'}.sort{|a, b| b[:score] <=> a[:score]}
+  print_results('=== Finally ===', nil, results_order_by_score, nil, true)
 else
-  print_results('=== Finally ===', summary.values.select{|a| a[:name].start_with? 'Team_'}.sort{|a, b| b[:score] <=> a[:score]}, summary, nil, true)
+  results_order_by_score = summary.values.select{|a| a[:name].start_with? 'Team_'}.sort{|a, b| b[:score] <=> a[:score]}
+  print_results('=== Finally ===', results_order_by_score, summary, nil, true)
 end
 
 if options.league or options.hero
-  print_league_result(summary_by_name)
+  print_league_result(summary_by_name, results_order_by_score.map{|a| a[:name]})
 end
 exit 0

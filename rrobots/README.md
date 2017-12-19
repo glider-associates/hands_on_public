@@ -6,7 +6,7 @@ bundle install
 
 # How to play
 ```
-RUBYLIB=lib bundle exec ./bin/rrobots --resolution=1500,1500 tanks/simple.rb tanks/simple.rb
+RUBYLIB=lib bundle exec ./bin/rrobots --resolution=1500,1500 tanks/samples/simple.rb tanks/samples/simple.rb
 ```
 
 # Team battle rule
@@ -34,9 +34,9 @@ ex > export MY_ROBOT=tanks/my_robot.rb
    Need move to avoid getting hit.
 
 ```
-1. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/simple --no-gui
-2. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/shooter --no-gui
-3. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/quick_shooter --no-gui
+1. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/samples/simple --no-gui
+2. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/samples/shooter --no-gui
+3. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/samples/quick_shooter --no-gui
 ```
 
 
@@ -51,10 +51,10 @@ ex > export MY_ROBOT=tanks/my_robot.rb
    Need to aim patterned moving targets.
 
 ```
-10. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/aiming --no-gui
-11. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/wall --no-gui
-12. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/circle --no-gui
-13. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/swing --no-gui
+10. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/samples/aiming --no-gui
+11. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/samples/wall --no-gui
+12. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/samples/circle --no-gui
+13. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/samples/swing --no-gui
 ```
 
 ## Advansed level(700x700)
@@ -63,16 +63,16 @@ ex > export MY_ROBOT=tanks/my_robot.rb
 22. Get 4500 score in 10 games against SwingShooter
 
 ```
-20. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/wall_shooter --no-gui
-21. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/circle_shooter --no-gui
-22. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/swing_shooter --no-gui
+20. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/samples/wall_shooter --no-gui
+21. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/samples/circle_shooter --no-gui
+22. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/samples/swing_shooter --no-gui
 ```
 
 ## Master1(1000x1000)
 23. Get 5500 score in 10 games against WallShooter, CircleShooter and SwingShooter
 
 ```
-23. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=1000,1000 $MY_ROBOT tanks/wall_shooter tanks/circle_shooter tanks/swing_shooter --no-gui
+23. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=1000,1000 $MY_ROBOT tanks/samples/wall_shooter tanks/samples/circle_shooter tanks/samples/swing_shooter --no-gui
 ```
 
 ## Master2(700x700)
@@ -81,51 +81,51 @@ ex > export MY_ROBOT=tanks/my_robot.rb
 33. Get 4000 score in 10 games against SiwingWithAiming
 
 ```
-30. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/wall_with_aiming --no-gui
-31. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/circle_with_aiming --no-gui
-32. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/swing_with_aiming --no-gui
+30. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/samples/wall_with_aiming --no-gui
+31. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/samples/circle_with_aiming --no-gui
+32. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/samples/swing_with_aiming --no-gui
 ```
 
 ## Master3(1000x1000)
 34. Get 5000 score in 10 games against WallWithAiming, CircleWithAiming and SwingWithAiming
 
 ```
-34. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=1000,1000 $MY_ROBOT tanks/wall_with_aiming tanks/circle_with_aiming tanks/swing_with_aiming --no-gui
+34. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=1000,1000 $MY_ROBOT tanks/samples/wall_with_aiming tanks/samples/circle_with_aiming tanks/samples/swing_with_aiming --no-gui
 ```
 
 ## Master4(700x700)
 50. Get 4000 score in 10 games against RandomCrawler
 
 ```
-50. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/random_crawler --no-gui
+50. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=700,700 $MY_ROBOT tanks/samples/random_crawler --no-gui
 ```
 
 ## Master5(1000x1000)
 60. Get 2500 score in 10 games against Reaction
 
 ```
-60. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=1000,1000 $MY_ROBOT tanks/reaction --no-gui
+60. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=1000,1000 $MY_ROBOT tanks/samples/reaction --no-gui
 ```
 
 ## Battle royale(3000x3000)
 100. Get 7000 score in 10 games against All sample robots
 
 ```
-100. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=3000,3000 $MY_ROBOT tanks/simple tanks/shooter tanks/quick_shooter tanks/wall_shooter tanks/circle_shooter tanks/swing_shooter tanks/wall_with_aiming tanks/circle_with_aiming tanks/swing_with_aiming tanks/reaction tanks/random_crawler --no-gui
+100. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=3000,3000 $MY_ROBOT tanks/samples/simple tanks/samples/shooter tanks/samples/quick_shooter tanks/samples/wall_shooter tanks/samples/circle_shooter tanks/samples/swing_shooter tanks/samples/wall_with_aiming tanks/samples/circle_with_aiming tanks/samples/swing_with_aiming tanks/samples/reaction tanks/samples/random_crawler --no-gui
 ```
 
 ## Team1(2000x2000)
 200. Get 7000 score in 10 games against All sample robots
 
 ```
-200. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=2000,2000 $MY_ROBOT $MY_ROBOT2 $MY_ROBOT3 tanks/circle_shooter tanks/swing_shooter tanks/wall_shooter --teams=3 --no-gui
+200. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=2000,2000 $MY_ROBOT $MY_ROBOT2 $MY_ROBOT3 tanks/samples/circle_shooter tanks/samples/swing_shooter tanks/samples/wall_shooter --teams=3 --no-gui
 ```
 
 ## Ace1(1500x1500)
 300. Get 6000 score in 10 games using 3 unit (robots or bots) team against circle_shooter, swing_shooter and wall_shooter team.
 
 ```
-300. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=1500,1500 $MY_ROBOT tanks/circle_shooter tanks/swing_shooter tanks/wall_shooter --teams=1 --no-gui
+300. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=1500,1500 $MY_ROBOT tanks/samples/circle_shooter tanks/samples/swing_shooter tanks/samples/wall_shooter --teams=1 --no-gui
 ```
 
 # Team2(2000x2000)
@@ -133,8 +133,8 @@ ex > export MY_ROBOT=tanks/my_robot.rb
 401. Win by score in 10 games using 3 unit (robots or bots) team against 3 random_crawlers team.
 
 ```
-400. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=2000,2000 $MY_ROBOT $MY_ROBOT1 $MY_ROBOT2 tanks/circle_with_aiming tanks/swing_with_aiming tanks/wall_with_aiming --teams=3 --no-gui
-402. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=2000,2000 $MY_ROBOT $MY_ROBOT1 $MY_ROBOT2 tanks/random_crawler tanks/random_crawler tanks/random_crawler --teams=3 --no-gui
+400. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=2000,2000 $MY_ROBOT $MY_ROBOT1 $MY_ROBOT2 tanks/samples/circle_with_aiming tanks/samples/swing_with_aiming tanks/samples/wall_with_aiming --teams=3 --no-gui
+402. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=2000,2000 $MY_ROBOT $MY_ROBOT1 $MY_ROBOT2 tanks/samples/random_crawler tanks/samples/random_crawler tanks/samples/random_crawler --teams=3 --no-gui
 ```
 
 ## Nightmare1(700x700)
@@ -156,9 +156,9 @@ ex > export MY_ROBOT=tanks/my_robot.rb
 702. Win by score in 10 games against 3 random_crawlers team.
 
 ```
-700. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=1500,1500 $MY_ROBOT tanks/reaction tanks/random_crawler --teams=1 --no-gui
-701. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=1500,1500 $MY_ROBOT tanks/circle_with_aiming tanks/swing_with_aiming tanks/wall_with_aiming --teams=1 --no-gui
-702. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=1500,1500 $MY_ROBOT tanks/random_crawler tanks/random_crawler tanks/random_crawler --teams=1 --no-gui
+700. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=1500,1500 $MY_ROBOT tanks/samples/reaction tanks/samples/random_crawler --teams=1 --no-gui
+701. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=1500,1500 $MY_ROBOT tanks/samples/circle_with_aiming tanks/samples/swing_with_aiming tanks/samples/wall_with_aiming --teams=1 --no-gui
+702. RUBYLIB=lib bundle exec ./bin/rrobots --match=10 --resolution=1500,1500 $MY_ROBOT tanks/samples/random_crawler tanks/samples/random_crawler tanks/samples/random_crawler --teams=1 --no-gui
 ```
 
 ## Hell(1500x1500)

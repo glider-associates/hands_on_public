@@ -1,7 +1,7 @@
 require 'rrobots'
-require "#{File.dirname(__FILE__)}/utils/sample"
+require "#{File.dirname(__FILE__)}/samples/utils/sample"
 
-class AntiYamaguchi
+class KubotaSly
   include Robot
   include SampleUtil
 

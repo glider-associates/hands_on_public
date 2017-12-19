@@ -1,3 +1,6 @@
+# right, left
+# strategy同時検証
+
 require 'rrobots'
 require 'matrix'
 
@@ -36,7 +39,7 @@ class Yamaguchi
         if @size_of_bullet == 3 and @attack_strategy.values.map{ |value| value[:hit] }.inject(:+) <= 20
           @size_of_bullet = 0.1
         elsif @long_distance
-          @size_of_bullet = 1.5
+          @size_of_bullet = 1
         end
         fire @size_of_bullet
       end
@@ -228,6 +231,7 @@ class Yamaguchi
       score[:hit] += 0.1
       {strategy: strategy, hit_ratio: (score[:hit] / score[:tries] * rand)}
     }.sort{ |a,b| b[:hit_ratio] - a[:hit_ratio]}.first[:strategy]
+    @attack_strategy[strategy][:tries] += 1
     direction = diff_direction( {x: target[:x], y: target[:y]}, {x: x, y: battlefield_height - y} )
     if strategy == :uniform_acceleration
       now_distance = Math::hypot(x - target[:x], (battlefield_height - y) - target[:y])

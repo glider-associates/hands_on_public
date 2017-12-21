@@ -18,8 +18,8 @@ class Yamaguchi
   def initialize
     @logg = Logger.new(STDOUT)
     @attack_strategy ||= {
-      direct: {tries: 10, hit: 0},
-      uniform_acceleration: {tries: 10, hit: 0},
+      direct: {tries: 10.0, hit: 1.0},
+      uniform_acceleration: {tries: 10.0, hit: 1.0},
       # right: 1,
       # left: 1
     }
@@ -32,17 +32,8 @@ class Yamaguchi
     if @will_fire and num_robots > 1
       @will_fire = false
       @size_of_bullet = (@log_by_robo[@aim].last[:energy] > 20 ? 3 : @log_by_robo[@aim].last[:energy]/3.3 - 0.1)
-      if @size_of_bullet < 1
-        @fire_at = time
-        fire @size_of_bullet if time - @fire_at > 60
-      else
-        if @size_of_bullet == 3 and @attack_strategy.values.map{ |value| value[:hit] }.inject(:+) <= 20
-          @size_of_bullet = 0.1
-        elsif @long_distance
-          @size_of_bullet = 1
-        end
-        fire @size_of_bullet
-      end
+      @size_of_bullet = 1 if @long_distance
+      fire @size_of_bullet
     end
     get_enemies_info
     @turn_radar_direction = round_whithin_range @turn_radar_direction, -60..60
@@ -70,7 +61,7 @@ class Yamaguchi
       @emergency = events['got_hit'].first[:from] if @got_hit_log[events['got_hit'].first[:from]].size
     end
     unless events['hit'].empty?
-      if expected = @expected_hits.select { |expected_hit| (time - expected_hit[:time]).abs < 3 }.first
+      if expected = @expected_hits.select { |expected_hit| (time - expected_hit[:time]).abs < 30 }.first
         @attack_strategy[expected[:strategy]][:hit] += 1
       end
     end
@@ -142,7 +133,7 @@ class Yamaguchi
         @gravity_points[time] = {
           x: x + speed * Math::cos(heading.to_rad) * t,
           y: y + speed * Math::sin(heading.to_rad) * t,
-          power: 20,
+          power: 10,
           expire: time + t
         }
       end
@@ -228,10 +219,8 @@ class Yamaguchi
     target = @log_by_robo.map { |name, logs| time == logs.last[:time] ? logs.last : nil }.compact.min_by { |log| log[:distance] }
     return if !target or @log_by_robo[target[:name]].size < 4
     strategy = @attack_strategy.map { |strategy, score|
-      score[:hit] += 0.1
       {strategy: strategy, hit_ratio: (score[:hit] / score[:tries] * rand)}
     }.sort{ |a,b| b[:hit_ratio] - a[:hit_ratio]}.first[:strategy]
-    @attack_strategy[strategy][:tries] += 1
     direction = diff_direction( {x: target[:x], y: target[:y]}, {x: x, y: battlefield_height - y} )
     if strategy == :uniform_acceleration
       now_distance = Math::hypot(x - target[:x], (battlefield_height - y) - target[:y])
@@ -241,11 +230,10 @@ class Yamaguchi
       time_to_be_hit = target[:distance] / (BULLET_SPEED + run_away_by_tick)
       nextx = calc_spot(target[:x], target[:x_speed], target[:x_acceleration], time_to_be_hit)
       nexty = calc_spot(target[:y], target[:y_speed], target[:y_acceleration], time_to_be_hit)
-      @expected_hits << {time: time + time_to_be_hit, strategy: strategy}
     elsif strategy == :direct
+      time_to_be_hit = target[:distance] / (BULLET_SPEED)
       nextx = target[:x]
       nexty = target[:y]
-      @expected_hits << {time: time + target[:distance] / (BULLET_SPEED), strategy: strategy}
     end
     # elsif strategy == :right
     #   direction += 90
@@ -261,10 +249,12 @@ class Yamaguchi
     @turn_gun_direction = diff_direction( {x: x, y: battlefield_height - y}, {x: nextx, y: nexty} ) - gun_heading
     @turn_gun_direction -= @turn_direction
     @turn_gun_direction = optimize_angle @turn_gun_direction
-    if @turn_gun_direction.abs <= 30
+    if @turn_gun_direction.abs <= 30 and gun_heat < 0.1
       @will_fire = true
       @long_distance = target[:distance] > 600
       @aim = target[:name]
+      @attack_strategy[strategy][:tries] += 1
+      @expected_hits << {time: time + time_to_be_hit, strategy: strategy}
     end
   end
 

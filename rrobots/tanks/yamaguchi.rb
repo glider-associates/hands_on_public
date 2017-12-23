@@ -135,6 +135,13 @@ class Yamaguchi
         @gravity_points[time] = {
           x: x + speed * Math::cos(heading.to_rad) * t,
           y: y + speed * Math::sin(heading.to_rad) * t,
+          power: 5,
+          expire: time + t
+        }
+        target_angle = diff_direction({x: x, y: (battlefield_height - y)}, {x: log[:x], y: log[:y]})
+        @gravity_points["avoid_bullet_#{time}"] = {
+          x: x + 100 * Math::cos((avoidance_direction(target_angle)).to_rad) * t,
+          y: y + 100 * Math::sin((avoidance_direction(target_angle)).to_rad) * t,
           power: 10,
           expire: time + t
         }
@@ -159,25 +166,25 @@ class Yamaguchi
     @gravity_points[:top_wall] = {
         x: x,
         y: battlefield_height,
-        power: 10,
+        power: 5,
         expire: time + 1
       }
     @gravity_points[:bottom_wall] = {
         x: x,
         y: 0,
-        power: 10,
+        power: 5,
         expire: time + 1
       }
     @gravity_points[:left_wall] = {
         x: 0,
         y: battlefield_height - y,
-        power: 10,
+        power: 5,
         expire: time + 1
       }
     @gravity_points[:right_wall] = {
         x: battlefield_width,
         y: battlefield_height - y,
-        power: 10,
+        power: 5,
         expire: time + 1
       }
     @gravity_points.each do |name, gravity|
@@ -294,5 +301,11 @@ class Yamaguchi
       result = current_point + (current_speed * acceleration_time) + (0.5 * current_acceleration * acceleration_time ** 2) + ( (0 < current_acceleration ? MAX_ROBO_SPEED : MIN_ROBO_SPEED ) * (duration - acceleration_time))
     end
     result
+  end
+
+  def avoidance_direction(target_angle)
+    right = optimize_angle(target_angle + 90 - heading)
+    left = optimize_angle(target_angle - 90 - heading)
+    right.abs < left.abs ? right : left
   end
 end

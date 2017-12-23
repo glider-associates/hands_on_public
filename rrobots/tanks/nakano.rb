@@ -7,7 +7,7 @@ class Nakano
     font_color 'lime'
     body_color 'lime'
     turret_color 'lime'
-    radar_color 'lime'
+    radar_color 'red'
   end
 
   def tick events
@@ -138,7 +138,7 @@ class Nakano
   end
 
   def mode_change
-    if energy < 50
+    if energy > 30
       @atack_mode = true
       @defence_mode = false
     else
@@ -183,7 +183,7 @@ class Nakano
      accelerate 0
      turn diff_direction_robot + 90
    else
-     accelerate 1
+     nakano_swing
    end
  end
 

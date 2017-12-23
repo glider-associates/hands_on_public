@@ -18,12 +18,11 @@ class Nakano
     unless events['robot_scanned'].empty?
     nakano_fire
     end
-    log = Logger.new(STDOUT)
-    log.debug [enemy_direction,heading,diff_direction_robot_right_angle]
+
   end
 
   def nakano_turn_radar
-    @turn_radar ||= 60
+    @turn_radar ||= 59
     if events['robot_scanned'].empty?
       turn_radar  @turn_radar
     else
@@ -131,7 +130,7 @@ class Nakano
   end
 
   def nakano_switch_move
-    if @cr_en_frag
+    if @cr_wa_frag
       nakano_circle
     else
       nakano_swing
@@ -139,7 +138,7 @@ class Nakano
   end
 
   def mode_change
-    if energy > 50
+    if energy < 50
       @atack_mode = true
       @defence_mode = false
     else
@@ -158,14 +157,44 @@ class Nakano
     end
   end
 
+  def enemy_energy
+    if events['robot_scanned'].empty?
+      return
+    elsif @pre_enemy_energy == nil
+      @pre_enemy_energy = events['robot_scanned'][0][:energy]
+    else
+      @diff_enemy_energy = @pre_enemy_energy - events['robot_scanned'][0][:energy]
+      @pre_enemy_energy = events['robot_scanned'][0][:energy]
+    end
+  end
+
+  def enemy_fired
+    if events['robot_scanned'].empty?
+      false
+    elsif (0.1..3).include?(@diff_enemy_energy)
+      true
+    else
+      false
+    end
+  end
+
+ def defence_move
+   unless enemy_fired
+     accelerate 0
+     turn diff_direction_robot + 90
+   else
+     accelerate 1
+   end
+ end
+
   def final_atack
       while events['crash_into_enemy'].empty? do
-      nakano_turn_radar
-      accelerate 1
-      turn diff_direction_robot
-      if events['crash_into_enemy'] = true
-        break
-      end
+        nakano_turn_radar
+        accelerate 1
+        turn diff_direction_robot
+        if events['crash_into_enemy'] = true
+          break
+        end
       end
   end
 
@@ -175,6 +204,8 @@ class Nakano
     crash_enemy_switch
     enemy_distance
     mode_change
+    enemy_energy
+    enemy_fired
     if events['robot_scanned'].empty?
       accelerate 0
       turn 0
@@ -184,9 +215,7 @@ class Nakano
       accelerate 1
       turn diff_direction_robot_right_angle
     elsif @defence_mode
-      nakano_circle
-    else
-      nakano_circle
+      defence_move
     end
   end
 
@@ -199,14 +228,16 @@ class Nakano
   end
 
    def nakano_fire
-      if diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] > 10 && energy > 30
+      if diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] > 10 && energy > 30 && events['robot_scanned'][0][:distance] <= 600
         fire 3
+      elsif diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] > 10 && energy > 30 && events['robot_scanned'][0][:distance] > 600
+          fire 1.1
       elsif diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] > 1 && energy > 30
         fire 0.1
       elsif diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] > 1
         fire 3
-      elsif events['robot_scanned'][0][:energy] < 1 && events['robot_scanned'][0][:energy] > 0 && energy > 10
-        fire 1
+      elsif diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] < 1 && events['robot_scanned'][0][:energy] > 0 && energy > 10
+        fire 1.1
       else
         fire 0
       end

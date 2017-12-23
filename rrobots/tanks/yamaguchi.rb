@@ -16,10 +16,11 @@ class Yamaguchi
   MIN_ROBO_SPEED = -8
 
   def initialize
+    @aa = 0
     @logg = Logger.new(STDOUT)
     @attack_strategy ||= {
-      direct: {tries: 10.0, hit: 1.0},
-      uniform_acceleration: {tries: 10.0, hit: 1.0},
+      direct: {tries: 5.0, hit: 1.0},
+      uniform_acceleration: {tries: 5.0, hit: 1.0},
       # right: 1,
       # left: 1
     }
@@ -30,6 +31,7 @@ class Yamaguchi
     @log_by_robo = {} if time == 0
     @targets = [] if time == 0
     if @will_fire and num_robots > 1
+      @pre_fire = true
       @will_fire = false
       @size_of_bullet = (@log_by_robo[@aim].last[:energy] > 20 ? 3 : @log_by_robo[@aim].last[:energy]/3.3 - 0.1)
       @size_of_bullet = 1 if @long_distance
@@ -61,7 +63,7 @@ class Yamaguchi
       @emergency = events['got_hit'].first[:from] if @got_hit_log[events['got_hit'].first[:from]].size
     end
     unless events['hit'].empty?
-      if expected = @expected_hits.select { |expected_hit| (time - expected_hit[:time]).abs < 30 }.first
+      if expected = @expected_hits.select { |expected_hit| (time - expected_hit[:time]).abs < 10 }.first
         @attack_strategy[expected[:strategy]][:hit] += 1
       end
     end
@@ -249,13 +251,14 @@ class Yamaguchi
     @turn_gun_direction = diff_direction( {x: x, y: battlefield_height - y}, {x: nextx, y: nexty} ) - gun_heading
     @turn_gun_direction -= @turn_direction
     @turn_gun_direction = optimize_angle @turn_gun_direction
-    if @turn_gun_direction.abs <= 30 and gun_heat < 0.1
+    if @turn_gun_direction.abs <= 30 and gun_heat < 0.1 and !@pre_fire
       @will_fire = true
       @long_distance = target[:distance] > 600
       @aim = target[:name]
       @attack_strategy[strategy][:tries] += 1
       @expected_hits << {time: time + time_to_be_hit, strategy: strategy}
     end
+    @pre_fire = false
   end
 
   def diff_direction(observation, target)

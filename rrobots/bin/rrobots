@@ -356,7 +356,13 @@ if options.gui
   arena.on_game_over{|battlefield|
     if game_over_counter < 0
       print_outcome(battlefield)
+      key = battlefield.robots.map(&:uniq_name).join '-'
+      summary_by_key[key] ||= {}
       print_battlefield_results battlefield, summary, options, match[0]
+      battlefield.robots.each do |robot|
+        summary_by_name[robot.uniq_name] ||= {}
+        summary_by_name[robot.uniq_name][(battlefield.robots.map(&:uniq_name) - [robot.uniq_name]).join] ||= summary
+      end
       match = matches.shift
       if match
         battlefield = setup_battlefield(options, match[1], match[0])

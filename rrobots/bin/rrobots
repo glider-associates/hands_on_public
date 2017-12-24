@@ -391,15 +391,19 @@ else
   end
 end
 
-def print_league_result(summary_by_name, robot_names)
+def print_league_result(summary_by_name, results_order_by_score)
+  robot_names = results_order_by_score.map{|a| a[:name]}
   offset = 0
   lines = Array.new(robot_names.length + 2){''}
   vertical_format lines[0], offset, ""
-  vertical_format lines[1], offset, "------------------------"
-  robot_names.each_with_index do |name, index|
+  vertical_format lines[1], offset, "-------------------------------"
+  results_order_by_score.each_with_index do |result, index|
+    name = result[:name]
+    score = result[:score].to_i
     vertical_format lines[index + 2], offset, "#{name}"
+    vertical_format lines[index + 2], (offset + 20), "#{score}"
   end
-  offset += 20
+  offset += 27
   robot_names.each_with_index do |name|
     summary_by_key = summary_by_name[name]
     vertical_format lines[0], offset, "| #{name}"
@@ -434,6 +438,6 @@ else
 end
 
 if options.league or options.hero
-  print_league_result(summary_by_name, results_order_by_score.map{|a| a[:name]})
+  print_league_result(summary_by_name, results_order_by_score)
 end
 exit 0

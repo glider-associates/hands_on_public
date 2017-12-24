@@ -176,6 +176,7 @@ class Kubota
   NUM_HIT_LOGS = 1000.freeze
   NUM_GOT_HIT_LOGS = 200.freeze
   NUM_LOGS = 1500.freeze
+  NUM_STATISTICS = 1500.freeze
   DYING_ENERGY = 1.0.freeze
   DANGER_ENERGY = 12.3.freeze
 
@@ -1251,6 +1252,7 @@ class Kubota
         prospect_point: point,
         acceleration: robot[:acceleration],
       }
+      robot[:logs] = robot[:logs].last(NUM_LOGS)
       robot[:fire_logs].reverse.each do |fire_log|
         diff_ticks = scanned_time - fire_log[:time]
         if (diff_ticks * BULLET_SPPED - scanned[:distance]).abs < HIT_RANGE * 1.1
@@ -1264,6 +1266,7 @@ class Kubota
               speed: distance(fire_log[:point], robot[:prospect_point]) / diff_ticks,
               distance: fire_log[:distance],
             }
+            robot[:statistics] = robot[:statistics].last(NUM_STATISTICS)
             break
           end
         end

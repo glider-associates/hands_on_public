@@ -1,3 +1,4 @@
+require 'securerandom'
 require 'rrobots'
 require 'logger'
 class Nakano
@@ -180,7 +181,6 @@ class Nakano
 
  def defence_move
    unless enemy_fired
-     accelerate 0
      turn diff_direction_robot + 90
    else
      nakano_swing
@@ -212,7 +212,11 @@ class Nakano
     elsif events['robot_scanned'][0][:energy] < 1 && events['robot_scanned'][0][:energy] > 0 && energy > 10
       final_atack
     elsif @atack_mode
-      accelerate 1
+      @accelerate ||= 1
+      if (time % 15) == 0 and SecureRandom.random_number < 0.5
+        @accelerate *= -1
+      end
+      accelerate @accelerate
       turn diff_direction_robot_right_angle
     elsif @defence_mode
       defence_move

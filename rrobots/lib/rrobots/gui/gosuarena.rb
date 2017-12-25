@@ -26,6 +26,13 @@ class RRobotsGameWindow < Gosu::Window
     @on_game_over_handlers = []
   end
 
+  def button_down(id)
+    case id
+    when Gosu::KbSpace
+      @pause ^= true
+    end
+  end
+
   def set_battlefield battlefield
     @battlefield = battlefield
     init_simulation
@@ -64,6 +71,9 @@ class RRobotsGameWindow < Gosu::Window
   end
 
   def simulate(ticks=1)
+    if @pause
+      return
+    end
     @explosions.reject!{|e,tko| e.dead }
     @bullets.reject!{|b,tko| b.dead }
     ticks.times do

@@ -1,3 +1,4 @@
+require 'securerandom'
 require 'rrobots'
 require 'logger'
 class Nakano
@@ -7,7 +8,7 @@ class Nakano
     font_color 'lime'
     body_color 'lime'
     turret_color 'lime'
-    radar_color 'red'
+    radar_color 'lime'
   end
 
   def tick events
@@ -15,8 +16,10 @@ class Nakano
     nakano_turn_radar
     nakano_turn_gun
     nakano_accelerate
-    unless events['robot_scanned'].empty?
-    nakano_fire
+      unless events['robot_scanned'].empty?
+        nakano_fire
+#    log = Logger.new(STDOUT)
+#    log.debug events
     end
 
   end
@@ -138,22 +141,12 @@ class Nakano
   end
 
   def mode_change
-    if energy > 30
+    if energy < 50
       @atack_mode = true
       @defence_mode = false
     else
       @atack_mode = false
       @defence_mode = true
-    end
-  end
-
-  def enemy_distance
-    if events['robot_scanned'].empty?
-      return
-    elsif events['robot_scanned'][0][:direction] < 100
-      @near
-    else
-      @near ^= true
     end
   end
 
@@ -178,42 +171,77 @@ class Nakano
     end
   end
 
+  def atack_move
+    if events['robot_scanned'][0][:distance] < 100
+      accelerate -1
+      turn diff_direction_robot_right_angle
+    elsif x <= battlefield_width / 2 && y <= battlefield_height / 2
+      @accelerate ||= 1
+        if (time % 20) == 0 and SecureRandom.random_number < 0.5
+         @accelerate *= -1
+        end
+      accelerate @accelerate
+      turn diff_direction_robot_right_angle
+    elsif  x > battlefield_width / 2 && y <= battlefield_height / 2
+      @accelerate ||= 1
+        if (time % 20) == 0 and SecureRandom.random_number < 0.5
+         @accelerate *= -1
+        end
+      accelerate @accelerate
+      turn rand(1..5)
+    elsif  x > battlefield_width / 2 && y > battlefield_height / 2
+      @accelerate ||= 1
+        if (time % 20) == 0 and SecureRandom.random_number < 0.5
+         @accelerate *= -1
+        end
+      accelerate @accelerate
+      turn diff_direction_robot + 90
+    elsif x <= battlefield_width / 2 && y > battlefield_height / 2
+      @accelerate ||= 1
+        if (time % 20) == 0 and SecureRandom.random_number < 0.5
+         @accelerate *= -1
+        end
+      accelerate @accelerate
+      turn rand(6..10)
+    end
+  end
+
  def defence_move
-   unless enemy_fired
-     accelerate 0
-     turn diff_direction_robot + 90
+   if enemy_fired
+     @accelerate ||= 1
+       if (time % 10) == 0 and SecureRandom.random_number < 0.5
+        @accelerate *= -1
+       end
+     accelerate @accelerate
    else
-     nakano_swing
+     @accelerate ||= 1
+       if (time % 10) == 0 and SecureRandom.random_number < 0.5
+        @accelerate *= -1
+       end
+     accelerate @accelerate
+     turn diff_direction_robot + 90
    end
  end
 
   def final_atack
-      while events['crash_into_enemy'].empty? do
-        nakano_turn_radar
-        accelerate 1
-        turn diff_direction_robot
-        if events['crash_into_enemy'] = true
-          break
-        end
-      end
+    accelerate 1
+    turn diff_direction_robot
   end
 
   def nakano_accelerate
     hit_switch
     crash_wall_switch
     crash_enemy_switch
-    enemy_distance
     mode_change
     enemy_energy
     enemy_fired
     if events['robot_scanned'].empty?
-      accelerate 0
-      turn 0
+      @accelerate ||= 1
+      accelerate @accelerate
     elsif events['robot_scanned'][0][:energy] < 1 && events['robot_scanned'][0][:energy] > 0 && energy > 10
       final_atack
     elsif @atack_mode
-      accelerate 1
-      turn diff_direction_robot_right_angle
+      atack_move
     elsif @defence_mode
       defence_move
     end
@@ -228,15 +256,16 @@ class Nakano
   end
 
    def nakano_fire
-      if diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] > 10 && energy > 30 && events['robot_scanned'][0][:distance] <= 600
+      if diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] > 10 && events['robot_scanned'][0][:distance] <= 300
         fire 3
-      elsif diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] > 10 && energy > 30 && events['robot_scanned'][0][:distance] > 600
-          fire 1.1
+      elsif diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] > 10 && energy > 30 && events['robot_scanned'][0][:distance] > 300
+        fire 1.1
       elsif diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] > 1 && energy > 30
-        fire 0.1
-      elsif diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] > 1
-        fire 3
-      elsif diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] < 1 && events['robot_scanned'][0][:energy] > 0 && energy > 10
+        @zero_fire = events['robot_scanned'][0][:energy] / 23.1
+        fire @zero_fire
+      elsif diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] > 1 && energy <= 30
+        fire 1.1
+      elsif diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] < 1 && events['robot_scanned'][0][:energy] > 0 && energy <= 10
         fire 1.1
       else
         fire 0

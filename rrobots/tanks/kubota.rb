@@ -81,7 +81,7 @@ module Util
   MAX_GUN_TURN = 30.0.freeze
   MAX_RADAR_TURN = 60.0.freeze
   MAX_SPEED = 8.0.freeze
-  BULLET_SPPED = 30.0.freeze
+  BULLET_SPEED = 30.0.freeze
   FIRE_POWR_RATIO = 3.3.freeze
   HIT_RANGE = 40.0.freeze
 
@@ -200,7 +200,7 @@ class Kubota
     move_bullets
     move_enemy_bullets
     draw_gun_heading
-    draw_enemy_bullets
+    draw_other_bullets
     draw_bullets
     hit_log events['hit']
     got_hit_log events['got_hit']
@@ -216,6 +216,8 @@ class Kubota
         time: time + 1,
         point: my_future_position,
         energy: energy,
+        gun_heading: gun_heading,
+        bot: self.class::BOT
       }
     }
     team_message Marshal.dump(@team_messages)
@@ -229,7 +231,7 @@ class Kubota
         Marshal.load(event[:message]).each do |data|
           if data[:e] == :fire
             data[:d][:robot] = @robots[event[:from]]
-            @enemy_bullets << data[:d] if data[:d][:robot]
+            @team_bullets << data[:d] if data[:d][:robot]
           elsif data[:e] == :scan
             data[:d][:events].each do |scanned|
               point = to_point scanned[:direction], scanned[:distance], data[:d][:point]
@@ -246,6 +248,7 @@ class Kubota
               name: event[:from],
             }
             robot_scanned [scanned], data[:d][:time], false
+            @robots[event[:from]][:bot] = data[:d][:bot]
           elsif data[:e] == :lockon
             set_lockon_mode data[:d][:name] if team_members.index(event[:from]) < team_members.index(name)
           elsif data[:e] == :hit
@@ -286,29 +289,42 @@ class Kubota
     events&.each do |hit|
       robot = @robots[hit[:from]]
       break unless robot
-      bullets = []
-      @enemy_bullets.each do |bullet|
-        bullets << bullet if distance(bullet[:point], position) < HIT_RANGE * 1.5
-      end
-      if bullets.length > 0
-        bullets.each do |bullet|
+      if team_members.include?(hit[:from])
+        bullet = @team_bullets.select{|bullet|
+          bullet[:robot][:name] == robot[:name]
+        }.min do |bullet|
+          distance(bullet[:point], position)
+        end
+        if bullet
           debug_defence("got_hit(#{hit[:damage]}) #{hit[:from]}: #{bullet[:aim_type]}")
+          @team_bullets.reject!{|b| bullet == b}
+        end
+      else
+        bullets = @enemy_bullets.select{|bullet|
+          bullet[:robot][:name] == robot[:name]
+        }.select do |bullet|
+          distance(bullet[:point], position) < (HIT_RANGE * 1.5)
+        end
+        if bullets.length > 0
+          bullets.each do |bullet|
+            debug_defence("got_hit(#{hit[:damage]}) #{hit[:from]}: #{bullet[:aim_type]}")
+            robot[:got_hit_logs] << {
+              time: time,
+              bullet_type: bullet[:aim_type],
+              hit: 1,
+            }
+            robot[:got_hit_logs] = robot[:got_hit_logs].last(NUM_GOT_HIT_LOGS)
+          end
+          @enemy_bullets.reject!{|b| bullets.include? b}
+        else
+          debug_defence("got_hit(#{hit[:damage]}) #{hit[:from]}: unknown")
           robot[:got_hit_logs] << {
             time: time,
-            bullet_type: bullet[:aim_type],
+            bullet_type: :unknown,
             hit: 1,
           }
           robot[:got_hit_logs] = robot[:got_hit_logs].last(NUM_GOT_HIT_LOGS)
         end
-        @enemy_bullets.reject!{|b| bullets.include? b}
-      else
-        debug_defence("got_hit(#{hit[:damage]}) #{hit[:from]}: unknown")
-        robot[:got_hit_logs] << {
-          time: time,
-          bullet_type: :unknown,
-          hit: 1,
-        }
-        robot[:got_hit_logs] = robot[:got_hit_logs].last(NUM_GOT_HIT_LOGS)
       end
     end
   end
@@ -354,16 +370,25 @@ class Kubota
     Gosu.draw_rect(@destination[:x]/2-20,@destination[:y]/2-20,40,40,Gosu::Color.argb(0xff_00ff00), 1)
   end
 
-  def draw_enemy_bullets
+  def draw_other_bullets
     return unless @debug_defence and gui
+    @team_bullets.each do |bullet|
+      if bullet[:warning]
+        color = Gosu::Color.argb(0xff_ff4444)
+        delta = to_point(bullet[:heading], BULLET_SPEED*8)
+        p1 = add_point(bullet[:point], delta)
+        p2 = diff_point(bullet[:point], delta)
+        Gosu.draw_line(p1[:x]/2,p1[:y]/2,color,p2[:x]/2,p2[:y]/2,color, 1)
+        Gosu.draw_rect(bullet[:point][:x]/2-3,bullet[:point][:y]/2-3,6,6,color, 1)
+      end
+    end
     @enemy_bullets.each do |bullet|
-      # TODO
       if bullet[:unknown]
         Gosu.draw_rect(bullet[:unknown][:x]/2-5,bullet[:unknown][:y]/2-5,10,10,Gosu::Color.argb(0xff_ff44ff), 3)
       end
       color = Gosu::Color.argb(0xff_4444ff)
       color = Gosu::Color.argb(0xff_ff4444) if bullet[:warning]
-      delta = to_point(bullet[:heading], BULLET_SPPED*8)
+      delta = to_point(bullet[:heading], BULLET_SPEED*8)
       p1 = add_point(bullet[:point], delta)
       p2 = diff_point(bullet[:point], delta)
       Gosu.draw_line(p1[:x]/2,p1[:y]/2,color,p2[:x]/2,p2[:y]/2,color, 1)
@@ -412,6 +437,7 @@ class Kubota
     @robots = @durable_context[:robots]
     @bullets = []
     @enemy_bullets = []
+    @team_bullets = []
     @anti_gravity_points = []
     @lockon_start = 0
     @lockon_target = nil
@@ -485,11 +511,12 @@ class Kubota
   ENEMY_ALPHA = 10.freeze
   ENEMY_MULTI = 2.freeze
   TEAM_AFFECT_DISTANCE = 2000.freeze
-  TEAM_ALPHA = 100.freeze
+  TEAM_ALPHA = 150.freeze
   TEAM_MULTI = 4.freeze
-  BULLET_AFFECT_DISTANCE = 200.freeze
-  BULLET_ALPHA = 50.freeze
-  BULLET_MULTI = 2.freeze
+  ENEMY_BULLET_ACTION_TICK = 10.freeze
+  ENEMY_BULLET_AFFECT_DISTANCE = 200.freeze
+  ENEMY_BULLET_ALPHA = 50.freeze
+  ENEMY_BULLET_MULTI = 2.freeze
   RAM_AFFECT_DISTANCE = 100.freeze
   RAM_ALPHA = 100.freeze
   RAM_MULTI = 1.freeze
@@ -497,10 +524,11 @@ class Kubota
   CLOSING_FOR_RAM_MULTI = 0.freeze
   CLOSING_ALPHA = -10.freeze
   CLOSING_MULTI = 0.freeze
-  def move_by_anti_gravity_enemy_bullets(vectors, bullet)
+
+  def move_by_anti_gravity_bullets(vectors, bullet, bullet_action_tick, bullet_affect_distance, bullet_alpha, bullet_multi)
     return unless bullet[:warning]
-    10.times.each do |i|
-      pair = anti_gravity(to_point(bullet[:heading], BULLET_SPPED*(i+1) * 2, bullet[:point]), BULLET_AFFECT_DISTANCE, BULLET_ALPHA, BULLET_MULTI)
+    bullet_action_tick.times.each do |i|
+      pair = anti_gravity(to_point(bullet[:heading], BULLET_SPEED*(i+1) * 2, bullet[:point]), bullet_affect_distance, bullet_alpha, bullet_multi)
       if pair
         right = bullet[:heading] + 90
         left = bullet[:heading] - 90
@@ -518,6 +546,24 @@ class Kubota
     end
   end
 
+  def move_by_anti_gravity_enemy_bullets(vectors, bullet)
+    move_by_anti_gravity_bullets vectors, bullet, ENEMY_BULLET_ACTION_TICK, ENEMY_BULLET_AFFECT_DISTANCE, ENEMY_BULLET_ALPHA, ENEMY_BULLET_MULTI
+  end
+
+  def move_by_anti_gravity_team_bullets(vectors, bullet)
+    move_by_anti_gravity_bullets vectors, bullet, ENEMY_BULLET_ACTION_TICK, ENEMY_BULLET_AFFECT_DISTANCE, ENEMY_BULLET_ALPHA, ENEMY_BULLET_MULTI
+  end
+
+  def move_by_anti_gravity_robots(vectors)
+    teams.each do |robot|
+      vectors << anti_gravity(robot[:prospect_point], TEAM_AFFECT_DISTANCE, TEAM_ALPHA, TEAM_MULTI)
+    end
+
+    enemies.each do |robot|
+      vectors << anti_gravity(robot[:prospect_point], ENEMY_AFFECT_DISTANCE, ENEMY_ALPHA, ENEMY_MULTI)
+    end
+  end
+
   def move_by_anti_gravity
     vectors = []
     vectors << anti_gravity({x: 0, y: position[:y]}, WALL_AFFECT_DISTANCE, WALL_ALPHA, WALL_MULTI)
@@ -525,21 +571,14 @@ class Kubota
     vectors << anti_gravity({x: position[:x], y: 0}, WALL_AFFECT_DISTANCE, WALL_ALPHA, WALL_MULTI)
     vectors << anti_gravity({x: position[:x], y: battlefield_height}, WALL_AFFECT_DISTANCE, WALL_ALPHA, WALL_MULTI)
 
-    @robots.values.each do |robot|
-      if (time - robot[:latest]) < 15
-        if robot[:team]
-          vectors << anti_gravity(robot[:prospect_point], TEAM_AFFECT_DISTANCE, TEAM_ALPHA, TEAM_MULTI)
-        # elsif robot[:distance] < SAFETY_DISTANCE
-          # TODO
-        #   vectors << anti_gravity(robot[:prospect_point], ENEMY_AFFECT_DISTANCE, ENEMY_ALPHA, ENEMY_MULTI)
-        else
-          vectors << anti_gravity(robot[:prospect_point], ENEMY_AFFECT_DISTANCE, ENEMY_ALPHA, ENEMY_MULTI)
-        end
-      end
-    end
+    move_by_anti_gravity_robots(vectors)
 
     @enemy_bullets.each do |bullet|
       move_by_anti_gravity_enemy_bullets vectors, bullet
+    end
+
+    @team_bullets.each do |bullet|
+      move_by_anti_gravity_team_bullets vectors, bullet
     end
 
     draw_anti_gravity_points
@@ -632,9 +671,9 @@ class Kubota
           time: time,
           start: position,
           robot: robot,
-          point: to_point(direction, BULLET_SPPED*3, position),
+          point: to_point(direction, BULLET_SPEED*3, position),
           heading: direction,
-          speed: BULLET_SPPED,
+          speed: BULLET_SPEED,
           aim_type: aim_type
         }
       end
@@ -647,9 +686,9 @@ class Kubota
         time: time,
         start: position,
         robot: robot,
-        point: to_point(@lockon_target[:direction], BULLET_SPPED*3, position),
+        point: to_point(@lockon_target[:direction], BULLET_SPEED*3, position),
         heading: @lockon_target[:direction],
-        speed: BULLET_SPPED,
+        speed: BULLET_SPEED,
         aim_type: :direct
       }
     end
@@ -667,19 +706,23 @@ class Kubota
     end
   end
 
-  TOTALLY_HIT_RANGE = 280.freeze
+  TOTALLY_HIT_DISTANCE = 280.freeze
   ZOMBI_ENERGY = 0.3.freeze
   def fire_with_logging(power, robot)
     if gun_heat == 0 and @lockon_target and power > 0
       team_members.each do |member_name|
         member = @robots[member_name]
-        if member
-          if member[:distance] < SAFETY_DISTANCE and Math.sin(gun_heading - member[:direction]) * member[:distance] < @size * 1.5
+        if member and member[:distance] < SAFETY_DISTANCE
+          prospect_member = member
+          bullet_tick = ((member[:distance] / BULLET_SPEED)).to_i.times do
+            prospect_member = prospect_next_by_straight prospect_member
+          end
+          if  Math.sin(gun_heading - to_direction(position, prospect_member[:prospect_point])) * member[:distance] < @size * 1.5
             return
           end
         end
       end
-      @lockon_target[:zombi_tick] = (@lockon_target[:distance] / BULLET_SPPED) + time if @lockon_target[:energy] <= ZOMBI_ENERGY
+      @lockon_target[:zombi_tick] = (@lockon_target[:distance] / BULLET_SPEED) + time if @lockon_target[:energy] <= ZOMBI_ENERGY
       fire power
       if @debug_attack
         log_by_aim_type = log_by_aim_type @lockon_target, 100
@@ -696,9 +739,9 @@ class Kubota
         time: time,
         start: position,
         robot: robot,
-        point: to_point(gun_heading, BULLET_SPPED*3, position),
+        point: to_point(gun_heading, BULLET_SPEED*3, position),
         heading: gun_heading,
-        speed: BULLET_SPPED,
+        speed: BULLET_SPEED,
         aim_type: robot[:aim_type]
       }
 
@@ -736,15 +779,15 @@ class Kubota
     prev_target_future = nil
     nearst = battlefield_height + battlefield_width
     ticks = 0
-    (Math.hypot(battlefield_height, battlefield_width) / BULLET_SPPED).to_i.times do
+    (Math.hypot(battlefield_height, battlefield_width) / BULLET_SPEED).to_i.times do
       distance = distance(position, target_future[:prospect_point])
-      if (distance - (BULLET_SPPED * ticks)).abs > nearst
+      if (distance - (BULLET_SPEED * ticks)).abs > nearst
         target_future = prev_target_future
         ticks -= 1
         break
       end
       prev_target_future = target_future
-      nearst = (distance - (BULLET_SPPED * ticks)).abs
+      nearst = (distance - (BULLET_SPEED * ticks)).abs
       target_future = block.call target_future
       break unless target_future
       draw_prospect_future(target_future[:prospect_point])
@@ -758,7 +801,7 @@ class Kubota
     target_direction = @lockon_target[:direction]
     if target_future
       ticks = target_future[:latest] - time
-      aiming_point = to_point gun_heading, BULLET_SPPED * ticks, position
+      aiming_point = to_point gun_heading, BULLET_SPEED * ticks, position
       if distance(aiming_point, target_future[:prospect_point]) < HIT_RANGE
         draw_aiming_point(aiming_point)
         fire_with_logging [power, 3].min, @lockon_target
@@ -853,7 +896,7 @@ class Kubota
       elsif @lockon_target[:distance] > SAFETY_DISTANCE
       end
       if energy < DANGER_ENERGY
-        if @lockon_target[:distance] < TOTALLY_HIT_RANGE
+        if @lockon_target[:distance] < TOTALLY_HIT_DISTANCE
           @lockon_target[:aim_type] = :accelerated
           power = 3
         elsif @lockon_target[:energy] <= ZOMBI_ENERGY
@@ -862,7 +905,7 @@ class Kubota
           power = [power, energy / 2].min
         end
       else
-        if @lockon_target[:distance] < TOTALLY_HIT_RANGE
+        if @lockon_target[:distance] < TOTALLY_HIT_DISTANCE
           power = 3
           @lockon_target[:aim_type] = :accelerated
         end
@@ -959,14 +1002,14 @@ class Kubota
             time: robot[:prev],
             start: bullet_start,
             robot: robot,
-            point: to_point(bullet_heading, BULLET_SPPED*(3 + time-robot[:prev]), bullet_start),
+            point: to_point(bullet_heading, BULLET_SPEED*(3 + time-robot[:prev]), bullet_start),
             heading: bullet_heading,
-            speed: BULLET_SPPED,
+            speed: BULLET_SPEED,
             aim_type: :direct
           }
           my_context_for_straight = new_my_context
           my_context_for_accelerated = new_my_context
-          (robot[:distance] / BULLET_SPPED).to_i.times.each do
+          (robot[:distance] / BULLET_SPEED).to_i.times.each do
             my_context_for_straight = prospect_next_by_straight(my_context_for_straight)
             my_context_for_accelerated = prospect_next_by_acceleration(my_context_for_accelerated)
           end
@@ -975,9 +1018,9 @@ class Kubota
             time: robot[:prev],
             start: bullet_start,
             robot: robot,
-            point: to_point(straight_bullet_heading, BULLET_SPPED*(3 + time-robot[:prev]), bullet_start),
+            point: to_point(straight_bullet_heading, BULLET_SPEED*(3 + time-robot[:prev]), bullet_start),
             heading: straight_bullet_heading,
-            speed: BULLET_SPPED,
+            speed: BULLET_SPEED,
             aim_type: :straight
           }
           accelerated_bullet_heading = to_direction(bullet_start, my_context_for_accelerated[:prospect_point])
@@ -985,9 +1028,9 @@ class Kubota
             time: robot[:prev],
             start: bullet_start,
             robot: robot,
-            point: to_point(accelerated_bullet_heading, BULLET_SPPED*(3 + time-robot[:prev]), bullet_start),
+            point: to_point(accelerated_bullet_heading, BULLET_SPEED*(3 + time-robot[:prev]), bullet_start),
             heading: accelerated_bullet_heading,
-            speed: BULLET_SPPED,
+            speed: BULLET_SPEED,
             aim_type: :accelerated
           }
         end
@@ -998,10 +1041,10 @@ class Kubota
   WARNING_BULLET_TICKS = 16.freeze
   UNKNOWN_BULLET_ALPHA = 10.freeze
   UNKNOWN_BULLET_MULTI = 1.freeze
-  def move_enemy_bullets_bullet_type(robot, bullet, bullet_type_context)
+  def move_other_bullets_bullet_type(robot, bullet, bullet_type_context)
     if bullet[:aim_type] != :team
       if bullet_type_context[:bullet_type] == :unknown
-        if (distance(bullet[:point], position) / BULLET_SPPED) < WARNING_BULLET_TICKS
+        if (distance(bullet[:point], position) / BULLET_SPEED) < WARNING_BULLET_TICKS
           left_or_right @heading, robot[:direction] do |direction, diff|
             put_anti_gravity_point 0, to_point(direction, 50, position), battlefield_width + battlefield_height, UNKNOWN_BULLET_ALPHA, UNKNOWN_BULLET_MULTI
           end
@@ -1055,34 +1098,41 @@ class Kubota
     {bullet_type: :unknown, hit: recent_got_hits.length, total: recent_got_hits.length}
   end
 
+  def move_bullet(bullet)
+    robot = bullet[:robot]
+    landing_ticks = (distance(bullet[:start], position) / BULLET_SPEED)
+    bullet[:point] = to_point bullet[:heading], bullet[:speed], bullet[:point]
+    if !bullet[:miss] and distance(bullet[:point], position) < HIT_RANGE
+      bullet[:miss] = 1
+    end
+    if out_of_field?(bullet[:point]) or (time - bullet[:time]) > landing_ticks
+      if bullet[:miss]
+        robot[:got_hit_logs] << {
+          time: time,
+          bullet_type: bullet[:aim_type],
+          hit: 0,
+        }
+      end
+      false
+    else
+      if @bullet_type_context_by_name[robot[:name]] == nil
+        @bullet_type_context_by_name[robot[:name]] = {bullet_type: :unknown, hit: 0, total: 0}
+        @bullet_type_context_by_name[robot[:name]] = bullet_type_context robot
+        robot[:bullet_type] = @bullet_type_context_by_name[robot[:name]]
+      end
+      bullet_type_context = robot[:bullet_type]
+      move_other_bullets_bullet_type robot, bullet, bullet_type_context
+      true
+    end
+  end
+
   def move_enemy_bullets
     @bullet_type_context_by_name = {}
     @enemy_bullets.select! do |bullet|
-      robot = bullet[:robot]
-      landing_ticks = (distance(bullet[:start], position) / BULLET_SPPED)
-      bullet[:point] = to_point bullet[:heading], bullet[:speed], bullet[:point]
-      if !bullet[:miss] and distance(bullet[:point], position) < HIT_RANGE
-        bullet[:miss] = 1
-      end
-      if out_of_field?(bullet[:point]) or (time - bullet[:time]) > landing_ticks
-        if bullet[:miss]
-          robot[:got_hit_logs] << {
-            time: time,
-            bullet_type: bullet[:aim_type],
-            hit: 0,
-          }
-        end
-        false
-      else
-        if @bullet_type_context_by_name[robot[:name]] == nil
-          @bullet_type_context_by_name[robot[:name]] = {bullet_type: :unknown, hit: 0, total: 0}
-          @bullet_type_context_by_name[robot[:name]] = bullet_type_context robot
-          robot[:bullet_type] = @bullet_type_context_by_name[robot[:name]]
-        end
-        bullet_type_context = robot[:bullet_type]
-        move_enemy_bullets_bullet_type robot, bullet, bullet_type_context
-        true
-      end
+      move_bullet bullet
+    end
+    @team_bullets.select! do |bullet|
+      move_bullet bullet
     end
   end
 
@@ -1217,6 +1267,7 @@ class Kubota
         zombi_tick: 0,
       }
       robot = @robots[scanned[:name]]
+      robot[:tmp] = {}
       if robot[:latest]
         next if robot[:latest] >= scanned_time
         diff_ticks = (scanned_time - robot[:latest])
@@ -1255,7 +1306,7 @@ class Kubota
       robot[:logs] = robot[:logs].last(NUM_LOGS)
       robot[:fire_logs].reverse.each do |fire_log|
         diff_ticks = scanned_time - fire_log[:time]
-        if (diff_ticks * BULLET_SPPED - scanned[:distance]).abs < HIT_RANGE * 1.1
+        if (diff_ticks * BULLET_SPEED - scanned[:distance]).abs < HIT_RANGE * 1.1
           if !robot[:statistics].last or robot[:statistics].last[:time] != fire_log[:time]
             robot[:statistics] << {
               time: fire_log[:time],
@@ -1270,7 +1321,7 @@ class Kubota
             break
           end
         end
-        break if diff_ticks * BULLET_SPPED > scanned[:distance]
+        break if diff_ticks * BULLET_SPEED > scanned[:distance]
       end
 
       robot[:logs] = robot[:logs].last(NUM_LOGS)
@@ -1282,6 +1333,7 @@ class Kubota
 
   def prospect_robots
     @robots.values.reject{|robot| robot[:latest] == time}.each do |robot|
+      robot[:tmp] = {}
       future = prospect_next_by_acceleration(robot)
       robot[:prospect_speed] = future[:prospect_speed]
       robot[:prospect_heading] = future[:prospect_heading]

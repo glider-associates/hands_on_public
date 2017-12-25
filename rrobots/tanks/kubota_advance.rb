@@ -45,6 +45,38 @@ class KubotaAdvance < Kubota
     end
   end
 
+  TEAM_BULLET_ACTION_TICK = 15.freeze
+  TEAM_BULLET_AFFECT_DISTANCE = 200.freeze
+  TEAM_BULLET_ALPHA = 100.freeze
+  TEAM_BULLET_MULTI = 3.freeze
+  def move_by_anti_gravity_team_bullets(vectors, bullet)
+    move_by_anti_gravity_bullets vectors, bullet, TEAM_BULLET_ACTION_TICK, TEAM_BULLET_AFFECT_DISTANCE, TEAM_BULLET_ALPHA, TEAM_BULLET_MULTI
+  end
+
+  RAY_ACTION_TICK = 10.freeze
+  RAY_ALPHA = 10.freeze
+  RAY_MULTI = 0.freeze
+  def move_by_anti_gravity_robots(vectors)
+    teams.each do |robot|
+      vectors << anti_gravity(robot[:prospect_point], TEAM_AFFECT_DISTANCE, TEAM_ALPHA, TEAM_MULTI)
+      if @lockon_target
+        diff_angle = angle_to_direction(robot[:direction] - @lockon_target[:direction])
+        if diff_angle.abs > 120
+          ray_direction = to_direction robot[:prospect_point], @lockon_target[:prospect_point]
+          put_anti_gravity_point 0, @lockon_target[:prospect_point], battlefield_width + battlefield_height, CLOSING_ALPHA, CLOSING_MULTI
+          RAY_ACTION_TICK.times.each do |index|
+            ray_point = to_point ray_direction, (index-(RAY_ACTION_TICK/2))*BULLET_SPEED + robot[:distance], robot[:prospect_point]
+            put_anti_gravity_point 0, ray_point, battlefield_width + battlefield_height, RAY_ALPHA, RAY_MULTI
+          end
+        end
+      end
+    end
+
+    enemies.each do |robot|
+      vectors << anti_gravity(robot[:prospect_point], ENEMY_AFFECT_DISTANCE, ENEMY_ALPHA, ENEMY_MULTI)
+    end
+  end
+
   def decide_move
     nearest = nil
     enemies.each do |e1|
@@ -231,7 +263,7 @@ class KubotaAdvance < Kubota
     {bullet_type: :unknown, hit: recent_got_hits.length, total: recent_got_hits.length}
   end
 
-  def move_enemy_bullets_bullet_type(robot, bullet, bullet_type_context)
+  def move_other_bullets_bullet_type(robot, bullet, bullet_type_context)
     if bullet_type_context[:bullet_type] == :unknown
       if @lockon_target == robot
         robot[:unknown_bullet] = bullet if !robot[:unknown_bullet] or !robot[:unknown_bullet][:unknown]
@@ -266,7 +298,7 @@ class KubotaAdvance < Kubota
       if robot[:unknown_bullet] and !robot[:unknown_bullet][:unknown]
         bullet = robot[:unknown_bullet]
         distance_to_bullet = distance(bullet[:point], position)
-        landing_ticks = distance_to_bullet / BULLET_SPPED
+        landing_ticks = distance_to_bullet / BULLET_SPEED
         bullet_direction = to_direction(position, bullet[:start])
         move_direction = bullet_direction + 90
         ticks = landing_ticks.to_i
@@ -294,39 +326,47 @@ class KubotaAdvance < Kubota
       super name
     else
       target = nil
-      # if teams.length > 0
-        distance_a = 0
-        distance_b = 0
-        target = enemies.select{|enemy| enemy[:zombi_tick] < time }.sort{|a, b|
-          team_members.each do |member_name|
-            member = @robots[member_name]
-            if member_name == name or !member
-              distance_a = a[:distance] / 2
-              distance_b = b[:distance] / 2
-            else
-              distance_a = distance(member[:prospect_point], a[:prospect_point])
-              distance_b = distance(member[:prospect_point], b[:prospect_point])
-            end
+      enemies.select{|enemy| enemy[:zombi_tick] < time }.each do |a|
+        a[:tmp][:lockon_distance] = 0
+        def adjust_distance(distance, bot)
+          result = 0
+          if distance < TOTALLY_HIT_DISTANCE
+            result = 1
+          elsif distance < SAFETY_DISTANCE
+            result = 2
+          else
+            result = distance
           end
-          distance_a *= a[:energy] ** 0.5
-          distance_b *= b[:energy] ** 0.5
-          ((a[:energy] < ZOMBI_ENERGY) ? 0 : distance_a) <=> ((b[:energy] < ZOMBI_ENERGY) ? 0 : distance_b)
-        }.first
-      # else
-      #   score_by_name = {}
-      #   enemies.each do |e1|
-      #     score_by_name[e1[:name]] = 0
-      #     enemies.each do |e2|
-      #       next if e1 == e2
-      #       score_by_name[e1[:name]] += distance e1[:prospect_point], e2[:prospect_point]
-      #     end
-      #     score_by_name[e1[:name]] -= distance position, e1[:prospect_point]
-      #   end
-      #   name = score_by_name.max {|a, b|
-      #     a[1] <=> b[1]
-      #   }.first
-      #   target = @robots[name]
-      # end
+          if !bot
+            result *= 3
+          end
+          result
+        end
+        teams.each do |team_member|
+          member_name = team_member[:name]
+          member = @robots[member_name]
+          adusted_distance = adjust_distance distance(member[:prospect_point], a[:prospect_point]), member[:bot]
+          if adusted_distance < @size
+            a[:tmp][:lockon_distance] = [a[:tmp][:lockon_distance], adusted_distance].min
+          elsif a[:tmp][:lockon_distance] == 0 or a[:tmp][:lockon_distance] > @size
+            a[:tmp][:lockon_distance] += adusted_distance
+          end
+        end
+        adusted_distance = adjust_distance a[:distance], self.class::BOT
+        if adusted_distance < @size
+          a[:tmp][:lockon_distance] = [a[:tmp][:lockon_distance], adusted_distance].min
+        elsif a[:tmp][:lockon_distance] == 0 or a[:tmp][:lockon_distance] > @size
+          a[:tmp][:lockon_distance] += adusted_distance
+        end
+        if a[:energy] < ZOMBI_ENERGY
+          a[:tmp][:lockon_distance] = 0
+        # else
+        #   a[:tmp][:lockon_distance] *= (a[:energy] ** 0.5)
+        end
+      end
+      target = enemies.select{|enemy| enemy[:zombi_tick] < time }.sort{|a, b|
+        a[:tmp][:lockon_distance] <=> b[:tmp][:lockon_distance]
+      }.first
       if target
         super target[:name]
       else

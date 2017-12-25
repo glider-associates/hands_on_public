@@ -216,7 +216,7 @@ class Kubota
         time: time + 1,
         point: my_future_position,
         energy: energy,
-        gun_heading: gun_heading,
+        gun_heat: gun_heat,
         bot: self.class::BOT
       }
     }
@@ -407,6 +407,8 @@ class Kubota
       simple = Gosu::Color.argb(0xff_00ff00)
       if bullet[:aim_type] == :direct
         Gosu.draw_rect(bullet[:point][:x]/2-3,bullet[:point][:y]/2-3,6,6,direct, 1)
+      elsif bullet[:aim_type] == :straight
+        Gosu.draw_rect(bullet[:point][:x]/2-3,bullet[:point][:y]/2-3,6,6,straight, 1)
       elsif bullet[:aim_type] == :straight_12
         Gosu.draw_rect(bullet[:point][:x]/2-3,bullet[:point][:y]/2-3,6,6,straight, 1)
       elsif bullet[:aim_type] == :straight_24
@@ -597,6 +599,9 @@ class Kubota
     if @status == :ram_attack and (time - @ram_attack_start) > 80
       target = @robots.values.reject{|a| a[:team]}.max{|a, b| a[:latest] <=> b[:latest] }
       set_destination(target[:prospect_point])
+    elsif last_enemy? and @status == :lockon and (energy - @lockon_target[:energy]) > 18 and @lockon_target[:distance] < TOTALLY_HIT_DISTANCE
+      target = @robots.values.reject{|a| a[:team]}.max{|a, b| a[:latest] <=> b[:latest] }
+      set_destination(target[:prospect_point])
     else
       if @lockon_target and @lockon_target[:distance] > SAFETY_DISTANCE
         if last_enemy? and energy < DANGER_ENERGY and @lockon_target[:distance] > AGRESSIVE_DISTANCE and @lockon_target[:energy] < DANGER_ENERGY
@@ -657,7 +662,7 @@ class Kubota
   end
 
   def aim_types
-    [:direct, :straight_12, :straight_24, :accelerated]
+    [:direct, :straight, :straight_12, :straight_24, :accelerated]
   end
 
   def virtual_bullet(robot, aim_type, &block)
@@ -693,6 +698,10 @@ class Kubota
       }
     end
 
+    virtual_bullet robot, :straight do |target_future|
+      prospect_next_by_straight target_future, 0
+    end
+
     virtual_bullet robot, :straight_12 do |target_future|
       prospect_next_by_straight target_future, 12
     end
@@ -706,7 +715,7 @@ class Kubota
     end
   end
 
-  TOTALLY_HIT_DISTANCE = 280.freeze
+  TOTALLY_HIT_DISTANCE = 270.freeze
   ZOMBI_ENERGY = 0.3.freeze
   def fire_with_logging(power, robot)
     if gun_heat == 0 and @lockon_target and power > 0
@@ -823,6 +832,11 @@ class Kubota
         prospect_next_by_acceleration target_future
       end
       return aim_type
+    elsif aim_type == :straight
+      fire_or_turn power do |target_future|
+        prospect_next_by_straight target_future, 0
+      end
+      return aim_type
     elsif aim_type == :straight_12
       fire_or_turn power do |target_future|
         prospect_next_by_straight target_future, 12
@@ -865,7 +879,7 @@ class Kubota
           power = [1, power].min
         end
       else
-        @lockon_target[:aim_type] = [:direct, :accelerated, :straight_12, :straight_24].shuffle.first
+        @lockon_target[:aim_type] = [:direct, :accelerated, :straight, :straight_12, :straight_24].shuffle.first
         power = [0.5, power].min
       end
       if @lockon_target[:distance] > PASSIVE_DISTANCE and highest_log and (highest_log[:ratio] <= 0.33 or highest_log[:real_hit] < 1)

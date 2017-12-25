@@ -16,12 +16,11 @@ class Nakano
     nakano_turn_radar
     nakano_turn_gun
     nakano_accelerate
-      unless events['robot_scanned'].empty?
-        nakano_fire
+    nakano_fire
+#    unless events['robot_scanned'].empty?
 #    log = Logger.new(STDOUT)
-#    log.debug events
-    end
-
+#    log.debug [gun_range,diff_direction_gun.abs,events['robot_scanned'][0][:distance]]
+#  end
   end
 
   def nakano_turn_radar
@@ -202,7 +201,7 @@ class Nakano
          @accelerate *= -1
         end
       accelerate @accelerate
-      turn rand(6..10)
+      turn rand(1..5)
     end
   end
 
@@ -249,23 +248,29 @@ class Nakano
 
   def gun_range
     unless events['robot_scanned'].empty?
-      @gun_range = 180 - 2 * (Math.atan(events['robot_scanned'][0][:distance] / 30))
+      @gun_range = 180 - 2 * ((Math.atan(events['robot_scanned'][0][:distance] / 30)) * 57.2958)
     else
       @gun_range = 2000
     end
   end
 
    def nakano_fire
-      if diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] > 10 && events['robot_scanned'][0][:distance] <= 300
-        fire 3
-      elsif diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] > 10 && energy > 30 && events['robot_scanned'][0][:distance] > 300
+      if events['robot_scanned'].empty?
+        fire 0
+      elsif diff_direction_gun.abs - gun_range <= 10 && diff_direction_gun.abs - gun_range > 0
         fire 1.1
-      elsif diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] > 1 && energy > 30
+      elsif gun_range > diff_direction_gun.abs && events['robot_scanned'][0][:energy] > 10 && events['robot_scanned'][0][:distance] <= 300
+        fire 3
+      elsif gun_range > diff_direction_gun.abs && events['robot_scanned'][0][:energy] > 10 && energy > 30 && events['robot_scanned'][0][:distance] > 300
+        fire 1.1
+      elsif gun_range > diff_direction_gun.abs && events['robot_scanned'][0][:energy] > 1 && energy > 30
         @zero_fire = events['robot_scanned'][0][:energy] / 23.1
         fire @zero_fire
-      elsif diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] > 1 && energy <= 30
+      elsif gun_range > diff_direction_gun.abs && events['robot_scanned'][0][:energy] > 1 && energy <= 30 && events['robot_scanned'][0][:distance] <= 200
+        fire 3
+      elsif gun_range > diff_direction_gun.abs && events['robot_scanned'][0][:energy] > 1 && energy <= 30 && events['robot_scanned'][0][:distance] > 200
         fire 1.1
-      elsif diff_direction_gun <= gun_range && events['robot_scanned'][0][:energy] < 1 && events['robot_scanned'][0][:energy] > 0 && energy <= 10
+      elsif gun_range > diff_direction_gun.abs && events['robot_scanned'][0][:energy] < 1 && events['robot_scanned'][0][:energy] > 0 && energy <= 10
         fire 1.1
       else
         fire 0

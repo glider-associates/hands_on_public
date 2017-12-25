@@ -41,6 +41,14 @@ class Nakano
     end
   end
 
+  def enemy_distance
+    unless events['robot_scanned'].empty?
+      @enemy_distance = events['robot_scanned'][0][:distance]
+    else
+      @enemy_distance ||= 0
+    end
+  end
+
   def diff_direction_gun
     if enemy_direction > gun_heading && enemy_direction - gun_heading >= 180
       (enemy_direction - gun_heading) - 360
@@ -140,7 +148,7 @@ class Nakano
   end
 
   def mode_change
-    if energy < 50
+    if energy < 30
       @atack_mode = true
       @defence_mode = false
     else
@@ -180,7 +188,7 @@ class Nakano
          @accelerate *= -1
         end
       accelerate @accelerate
-      turn diff_direction_robot_right_angle
+      turn diff_direction_robot + 90
     elsif  x > battlefield_width / 2 && y <= battlefield_height / 2
       @accelerate ||= 1
         if (time % 20) == 0 and SecureRandom.random_number < 0.5

@@ -376,7 +376,13 @@ if options.gui
   }
   arena.show
 else
+  break_flg = false
+  trap :INT do
+    break_flg = true
+  end
+
   matches.each do |match|
+    break if break_flg
     battlefield = setup_battlefield(options, match[1], match[0])
     run_out_of_gui(battlefield)
     print_outcome(battlefield)

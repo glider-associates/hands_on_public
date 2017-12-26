@@ -27,7 +27,7 @@ class Yamaguchi
       @size_of_bullet = (@log_by_robo[@aim].last[:energy] > 20 ? 3 : @log_by_robo[@aim].last[:energy]/3.3 - 0.3)
       @size_of_bullet = (@log_by_robo[@aim].last[:energy] > 20 ? 1 : @log_by_robo[@aim].last[:energy]/3.3 - 0.3) if @long_distance
       @size_of_bullet = 3 if @short_distance
-      fire @size_of_bullet if @size_of_bullet >= 0.1
+      fire @size_of_bullet if @log_by_robo[@aim].last[:energy] >= 0.5
     end
     get_enemies_info
     set_run_params
@@ -53,7 +53,8 @@ class Yamaguchi
       @got_hit_log[events['got_hit'].first[:from]] ||= []
       @got_hit_log[events['got_hit'].first[:from]].delete_if { |hit_time| time - hit_time > 60 }
       @got_hit_log[events['got_hit'].first[:from]] << time
-      @emergency = events['got_hit'].first[:from] if @got_hit_log[events['got_hit'].first[:from]].size
+      @emergency = @got_hit_log[events['got_hit'].first[:from]].size > 1
+      @avoid_angle *= -1
     end
     @singular_points = {} if time == 0
     if events['robot_scanned'].empty?
@@ -141,28 +142,24 @@ class Yamaguchi
         expire: logs.last[:time] + 60
       }
     end
+
+    @avoid_angle ||= 90
+    @avoid_angle *= -1 if rand < 0.05
     if @target_angle
-      @gravity_points['randam'] ||= {
-        x: x + 100 * Math::cos((avoidance_direction(@target_angle)).to_rad),
-        y: (battlefield_height - y) + 100 * Math::sin((avoidance_direction(@target_angle)).to_rad),
-        power: 10,
-        expire: time + 40
+      @gravity_points['randam'] = {
+        x: x + 100 * Math::cos((optimize_angle(@target_angle + @avoid_angle)).to_rad),
+        y: (battlefield_height - y) + 100 * Math::sin((optimize_angle(@target_angle + @avoid_angle)).to_rad),
+        power: 5,
+        expire: time + 30
       }
-      if time > @gravity_points['randam'][:expire].to_i
-        @gravity_points['randam'] = {
-          x: x + 100 * Math::cos((avoidance_direction(@target_angle)).to_rad),
-          y: (battlefield_height - y) + 100 * Math::sin((avoidance_direction(@target_angle)).to_rad),
-          power: 10,
-          expire: time + 40
-        }
-      end
     end
-    if @size_of_bullet and @size_of_bullet < 1
+
+    if @log_by_robo[@aim] and @log_by_robo[@aim].last[:energy].to_f < 0.5
       @gravity_points[@aim] = {
         x: @log_by_robo[@aim].last[:x],
         y: @log_by_robo[@aim].last[:y],
-        power: -50,
-        expire: time + 60
+        power: -100,
+        expire: time + 1000
       }
     end
     @gravity_points[:top_wall] = {
@@ -248,14 +245,16 @@ class Yamaguchi
     # :right
     angle = direction + 90
     angle -= 360 if angle > 360
-    nextx_right = target[:x] + 30 * Math.cos(optimize_angle(direction + 90).to_rad)
-    nexty_right = target[:y] + 30 * Math.sin(optimize_angle(direction + 90).to_rad)
+    nextx_right = target[:x] + 30 * Math.cos(angle.to_rad)
+    nexty_right = target[:y] + 30 * Math.sin(angle.to_rad)
 
     # :right2
-    angle = direction + 90
-    angle -= 360 if angle > 360
-    nextx_right2 = target[:x] + 120 * Math.cos(optimize_angle(direction + 90).to_rad)
-    nexty_right2 = target[:y] + 120 * Math.sin(optimize_angle(direction + 90).to_rad)
+    nextx_right2 = target[:x] + 75 * Math.cos(angle.to_rad)
+    nexty_right2 = target[:y] + 75 * Math.sin(angle.to_rad)
+
+    # :right3
+    nextx_right3 = target[:x] + 120 * Math.cos(angle.to_rad)
+    nexty_right3 = target[:y] + 120 * Math.sin(angle.to_rad)
 
     # :left
     angle = direction - 90
@@ -264,10 +263,12 @@ class Yamaguchi
     nexty_left = target[:y] + 30 * Math.sin(angle.to_rad)
 
     # :left2
-    angle = direction - 90
-    angle += 360 if angle < 0
-    nextx_left2 = target[:x] + 120 * Math.cos(angle.to_rad)
-    nexty_left2 = target[:y] + 120 * Math.sin(angle.to_rad)
+    nextx_left2 = target[:x] + 75 * Math.cos(angle.to_rad)
+    nexty_left2 = target[:y] + 75 * Math.sin(angle.to_rad)
+
+    # :left3
+    nextx_left3 = target[:x] + 120 * Math.cos(angle.to_rad)
+    nexty_left3 = target[:y] + 120 * Math.sin(angle.to_rad)
 
     strategy = @correct_strategy
     strategy = :uniform_acceleration if target[:distance] < 500
@@ -278,21 +279,29 @@ class Yamaguchi
     if strategy == :uniform_acceleration
       nextx = nextx_uniform_acceleration
       nexty = nexty_uniform_acceleration
-    elsif strategy == :direct
-      nextx = nextx_direct
-      nexty = nexty_direct
     elsif strategy == :right
       nextx = nextx_right
       nexty = nexty_right
     elsif strategy == :right2
       nextx = nextx_right2
       nexty = nexty_right2
+    elsif strategy == :right3
+      nextx = nextx_right3
+      nexty = nexty_right3
     elsif strategy == :left
       nextx = nextx_left
       nexty = nexty_left
     elsif strategy == :left2
       nextx = nextx_left2
       nexty = nexty_left2
+    elsif strategy == :left3
+      nextx = nextx_left3
+      nexty = nexty_left3
+    end
+    if strategy == :direct or nextx < 0 or nextx > battlefield_width or nexty < 0 or nexty > battlefield_height
+      strategy = :direct
+      nextx = nextx_direct
+      nexty = nexty_direct
     end
 
     time_to_be_hit = Math::hypot(target[:x] - y, target[:y] - (battlefield_height - y)) / (BULLET_SPEED)
@@ -315,6 +324,8 @@ class Yamaguchi
           left: {x: nextx_left, y: nexty_left},
           right2: {x: nextx_right2, y: nexty_right2},
           left2: {x: nextx_left2, y: nexty_left2},
+          right3: {x: nextx_right3, y: nexty_right3},
+          left3: {x: nextx_left3, y: nexty_left3},
         }
       }
     end
@@ -354,10 +365,5 @@ class Yamaguchi
       result = current_point + (current_speed * acceleration_time) + (0.5 * current_acceleration * acceleration_time ** 2) + ( (0 < current_acceleration ? MAX_ROBO_SPEED : MIN_ROBO_SPEED ) * (duration - acceleration_time))
     end
     result
-  end
-
-  def avoidance_direction(target_angle)
-    direction = 90 * (rand > 0.5 ? 1 : -1)
-    optimize_angle(target_angle + direction - heading)
   end
 end

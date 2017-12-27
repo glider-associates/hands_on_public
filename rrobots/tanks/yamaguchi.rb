@@ -139,7 +139,7 @@ class Yamaguchi
       @gravity_points[name] = {
         x: logs.last[:x],
         y: logs.last[:y],
-        power: 10,
+        power: 15,
         expire: logs.last[:time] + 60
       }
     end
@@ -166,25 +166,25 @@ class Yamaguchi
     @gravity_points[:top_wall] = {
         x: x,
         y: battlefield_height,
-        power: 5,
+        power: 10,
         expire: time + 1
       }
     @gravity_points[:bottom_wall] = {
         x: x,
         y: 0,
-        power: 5,
+        power: 10,
         expire: time + 1
       }
     @gravity_points[:left_wall] = {
         x: 0,
         y: battlefield_height - y,
-        power: 5,
+        power: 10,
         expire: time + 1
       }
     @gravity_points[:right_wall] = {
         x: battlefield_width,
         y: battlefield_height - y,
-        power: 5,
+        power: 10,
         expire: time + 1
       }
     @gravity_points.each do |name, gravity|
@@ -246,30 +246,38 @@ class Yamaguchi
     # :right
     angle = direction + 90
     angle -= 360 if angle > 360
-    nextx_right = target[:x] + 35 * Math.cos(angle.to_rad)
-    nexty_right = target[:y] + 35 * Math.sin(angle.to_rad)
+    nextx_right = target[:x] + 30 * Math.cos(angle.to_rad)
+    nexty_right = target[:y] + 30 * Math.sin(angle.to_rad)
 
     # :right2
-    nextx_right2 = target[:x] + 80 * Math.cos(angle.to_rad)
-    nexty_right2 = target[:y] + 80 * Math.sin(angle.to_rad)
+    nextx_right2 = target[:x] + 70 * Math.cos(angle.to_rad)
+    nexty_right2 = target[:y] + 70 * Math.sin(angle.to_rad)
 
     # :right3
-    nextx_right3 = target[:x] + 120 * Math.cos(angle.to_rad)
-    nexty_right3 = target[:y] + 120 * Math.sin(angle.to_rad)
+    nextx_right3 = target[:x] + 110 * Math.cos(angle.to_rad)
+    nexty_right3 = target[:y] + 110 * Math.sin(angle.to_rad)
+
+    # :right4
+    nextx_right4 = target[:x] + 150 * Math.cos(angle.to_rad)
+    nexty_right4 = target[:y] + 150 * Math.sin(angle.to_rad)
 
     # :left
     angle = direction - 90
     angle += 360 if angle < 0
-    nextx_left = target[:x] + 35 * Math.cos(angle.to_rad)
-    nexty_left = target[:y] + 35 * Math.sin(angle.to_rad)
+    nextx_left = target[:x] + 30 * Math.cos(angle.to_rad)
+    nexty_left = target[:y] + 30 * Math.sin(angle.to_rad)
 
     # :left2
-    nextx_left2 = target[:x] + 80 * Math.cos(angle.to_rad)
-    nexty_left2 = target[:y] + 80 * Math.sin(angle.to_rad)
+    nextx_left2 = target[:x] + 70 * Math.cos(angle.to_rad)
+    nexty_left2 = target[:y] + 70 * Math.sin(angle.to_rad)
 
     # :left3
-    nextx_left3 = target[:x] + 120 * Math.cos(angle.to_rad)
-    nexty_left3 = target[:y] + 120 * Math.sin(angle.to_rad)
+    nextx_left3 = target[:x] + 110 * Math.cos(angle.to_rad)
+    nexty_left3 = target[:y] + 110 * Math.sin(angle.to_rad)
+
+    # :left4
+    nextx_left4 = target[:x] + 150 * Math.cos(angle.to_rad)
+    nexty_left4 = target[:y] + 150 * Math.sin(angle.to_rad)
 
     strategy = @correct_strategy
     strategy = :uniform_acceleration if target[:distance] < 500
@@ -289,6 +297,9 @@ class Yamaguchi
     elsif strategy == :right3
       nextx = nextx_right3
       nexty = nexty_right3
+    elsif strategy == :right4
+      nextx = nextx_right4
+      nexty = nexty_right4
     elsif strategy == :left
       nextx = nextx_left
       nexty = nexty_left
@@ -298,6 +309,9 @@ class Yamaguchi
     elsif strategy == :left3
       nextx = nextx_left3
       nexty = nexty_left3
+    elsif strategy == :left4
+      nextx = nextx_left4
+      nexty = nexty_left4
     end
     if strategy == :direct or nextx < 0 or nextx > battlefield_width or nexty < 0 or nexty > battlefield_height
       strategy = :direct
@@ -327,6 +341,8 @@ class Yamaguchi
           left2: {x: nextx_left2, y: nexty_left2},
           right3: {x: nextx_right3, y: nexty_right3},
           left3: {x: nextx_left3, y: nexty_left3},
+          right4: {x: nextx_right4, y: nexty_right4},
+          left4: {x: nextx_left4, y: nexty_left4},
         }
       }
     end

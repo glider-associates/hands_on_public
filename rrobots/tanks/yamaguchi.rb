@@ -1,6 +1,5 @@
 require 'rrobots'
 require 'matrix'
-
 require 'logger'
 
 class Yamaguchi
@@ -42,7 +41,7 @@ class Yamaguchi
       @turn_radar_direction -= (@turn_direction + @turn_gun_direction)
       @adjust_radar = false
     end
-    turn_radar optimize_angle optimize_angle @turn_radar_direction
+    turn_radar optimize_angle(@turn_radar_direction)
     accelerate @acceleration
   end
 
@@ -54,7 +53,7 @@ class Yamaguchi
       @got_hit_log[events['got_hit'].first[:from]].delete_if { |hit_time| time - hit_time > 60 }
       @got_hit_log[events['got_hit'].first[:from]] << time
       @emergency = @got_hit_log[events['got_hit'].first[:from]].size > 1
-      @avoid_angle *= -1
+      @avoid_angle *= -1 if rand < 0.8
     end
     @singular_points = {} if time == 0
     if events['robot_scanned'].empty?
@@ -124,7 +123,9 @@ class Yamaguchi
       got_hit = events['got_hit'].select { |hit_log| hit_log[:from] == log[:name] }.first
       hit_bonus = got_hit[:damage] * 2/3 if got_hit
       @target_angle = diff_direction({x: x, y: (battlefield_height - y)}, {x: log[:x], y: log[:y]})
-      if (0.1..3).cover? @log_by_robo[log[:name]][-2][:energy] - log[:energy] + hit_bonus
+      diff_energy = @log_by_robo[log[:name]][-2][:energy] - log[:energy] + hit_bonus
+      if (0.1..3).cover? diff_energy
+        @avoid_angle *= -1 if diff_energy > 2 and rand < 0.8
         t = log[:distance] / BULLET_SPEED
         @gravity_points[time] = {
           x: x + speed * Math::cos(heading.to_rad) * t,
@@ -154,7 +155,7 @@ class Yamaguchi
       }
     end
 
-    if @log_by_robo[@aim] and @log_by_robo[@aim].last[:energy].to_f < 0.5
+    if @log_by_robo[@aim] and @log_by_robo[@aim].last[:energy].to_f < 1
       @gravity_points[@aim] = {
         x: @log_by_robo[@aim].last[:x],
         y: @log_by_robo[@aim].last[:y],
@@ -245,12 +246,12 @@ class Yamaguchi
     # :right
     angle = direction + 90
     angle -= 360 if angle > 360
-    nextx_right = target[:x] + 30 * Math.cos(angle.to_rad)
-    nexty_right = target[:y] + 30 * Math.sin(angle.to_rad)
+    nextx_right = target[:x] + 35 * Math.cos(angle.to_rad)
+    nexty_right = target[:y] + 35 * Math.sin(angle.to_rad)
 
     # :right2
-    nextx_right2 = target[:x] + 75 * Math.cos(angle.to_rad)
-    nexty_right2 = target[:y] + 75 * Math.sin(angle.to_rad)
+    nextx_right2 = target[:x] + 80 * Math.cos(angle.to_rad)
+    nexty_right2 = target[:y] + 80 * Math.sin(angle.to_rad)
 
     # :right3
     nextx_right3 = target[:x] + 120 * Math.cos(angle.to_rad)
@@ -259,12 +260,12 @@ class Yamaguchi
     # :left
     angle = direction - 90
     angle += 360 if angle < 0
-    nextx_left = target[:x] + 30 * Math.cos(angle.to_rad)
-    nexty_left = target[:y] + 30 * Math.sin(angle.to_rad)
+    nextx_left = target[:x] + 35 * Math.cos(angle.to_rad)
+    nexty_left = target[:y] + 35 * Math.sin(angle.to_rad)
 
     # :left2
-    nextx_left2 = target[:x] + 75 * Math.cos(angle.to_rad)
-    nexty_left2 = target[:y] + 75 * Math.sin(angle.to_rad)
+    nextx_left2 = target[:x] + 80 * Math.cos(angle.to_rad)
+    nexty_left2 = target[:y] + 80 * Math.sin(angle.to_rad)
 
     # :left3
     nextx_left3 = target[:x] + 120 * Math.cos(angle.to_rad)

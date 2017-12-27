@@ -240,6 +240,7 @@ class KubotaAdvance < Kubota
     nil
   end
 
+  RATIO_DENOMINATOR = 3.0.freeze
   def bullet_type_context(robot)
     context_by_bullet_type = {}
     recent_got_hits = []
@@ -247,19 +248,19 @@ class KubotaAdvance < Kubota
     robot[:got_hit_logs].reverse.each do |got_hit_log|
       hit_count += got_hit_log[:hit]
       recent_got_hits << got_hit_log
-      break if hit_count >= 3
+      break if hit_count >= RATIO_DENOMINATOR
     end
     recent_got_hits.each do |got_hit_log|
       bullet_type = got_hit_log[:bullet_type]
       context_by_bullet_type[bullet_type] ||= {bullet_type: bullet_type, hit: 0, total: 0}
       context_by_bullet_type[bullet_type][:hit] += got_hit_log[:hit]
       context_by_bullet_type[bullet_type][:total] += 1.0
-      context_by_bullet_type[bullet_type][:ratio] = context_by_bullet_type[bullet_type][:hit] / context_by_bullet_type[bullet_type][:total]
+      context_by_bullet_type[bullet_type][:ratio] = context_by_bullet_type[bullet_type][:hit] / RATIO_DENOMINATOR
     end
     highest = context_by_bullet_type.values.max do |a, b|
       a[:ratio] <=> b[:ratio]
     end
-    return highest if highest and highest[:hit] >= 2 and highest[:ratio] > 0.5
+    return highest if highest and highest[:hit] >= 2 and highest[:ratio] >= 0.5
     {bullet_type: :unknown, hit: recent_got_hits.length, total: recent_got_hits.length}
   end
 
@@ -282,13 +283,12 @@ class KubotaAdvance < Kubota
     while count > 0
       count -= 1.0
       alpha = 1.0
-      if slope < 0
+      if count < 0
         alpha = count + 1.0
       end
       random += alpha * SecureRandom.random_number
     end
-    random = 0.5 - (random / slope - 0.5).abs
-    0.5 + ((SecureRandom.random_number < 0.5) ? random : -random)
+    1 - (random * 2.0 / slope - 1).abs
   end
 
   def move_enemy_bullets
@@ -300,23 +300,62 @@ class KubotaAdvance < Kubota
         distance_to_bullet = distance(bullet[:point], position)
         landing_ticks = distance_to_bullet / BULLET_SPEED
         bullet_direction = to_direction(position, bullet[:start])
-        move_direction = bullet_direction + 90
-        ticks = landing_ticks.to_i
-        forward, backward = reachable_distance(speed, ticks)
-        diff_turn = diff_direction(heading, move_direction)
-        turn_towards = (diff_turn.abs < 90) ? 1 : -1
-        from = to_point(move_direction, forward*turn_towards, position)
-        to = to_point(move_direction, backward*turn_towards, position)
-        eval_wall from
-        eval_wall to
-        slope = 1 + (50.0 / landing_ticks)
-        random = random_by_slope slope
-        destination = {
-          x: ((to[:x] - from[:x]) * random + from[:x]),
-          y: ((to[:y] - from[:y]) * random + from[:y]),
-        }
-        distance_to_bullet *= 0.95 if last_enemy? and @lockon_target and @lockon_target[:distance] > AGRESSIVE_DISTANCE and @lockon_target[:energy] < (energy / 2.0)
-        bullet[:unknown] = to_point(to_direction(bullet[:point], destination), distance_to_bullet, bullet[:point])
+        move_direction = (bullet_direction + 90) % 360
+        if landing_ticks < 10
+          ticks = 15
+        else
+          slope = 1 + (50.0 / landing_ticks)
+          random = random_by_slope slope
+          ticks = (landing_ticks * random).to_i
+          # TODO limit ticks to avoid long run
+        end
+        diff_turn = diff_direction(move_direction, heading)
+        patterns = [
+          {
+            turn: diff_turn,
+            heading: heading,
+            speed: speed,
+            acceleration: 1,
+            point: position,
+          }, {
+            turn: angle_to_direction(diff_turn + 180),
+            heading: heading,
+            speed: speed,
+            acceleration: 1,
+            point: position,
+          }, {
+            turn: diff_turn,
+            heading: heading,
+            speed: speed,
+            acceleration: -1,
+            point: position,
+          }, {
+            turn: angle_to_direction(diff_turn + 180),
+            heading: heading,
+            speed: speed,
+            acceleration: -1,
+            point: position,
+          }]
+        for pattern in patterns
+          ticks.times do |i|
+            current_turn = max_turn pattern[:turn], MAX_TURN
+            pattern[:turn] -= current_turn
+            pattern[:heading] += current_turn
+            pattern[:speed] = next_speed(pattern[:speed], pattern[:acceleration])
+            pattern[:point] = eval_wall to_point(pattern[:heading], pattern[:speed], pattern[:point])
+          end
+        end
+        if SecureRandom.random_number < 0.5
+          pattern = patterns.max{|pattern|
+            Math.cos(to_radian(diff_direction(move_direction, to_direction(position, pattern[:point])))) * distance(position, pattern[:point])
+          }
+          bullet[:unknown] = pattern[:point]
+        else
+          pattern = patterns.min{|pattern|
+            Math.cos(to_radian(diff_direction(move_direction, to_direction(position, pattern[:point])))) * distance(position, pattern[:point])
+          }
+          bullet[:unknown] = pattern[:point]
+        end
       end
     end
   end

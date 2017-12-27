@@ -121,19 +121,6 @@ module Util
     [[current + acceleration, 8].min, -8].max
   end
 
-  def reachable_distance(prospect_speed, tick)
-    forward = prospect_speed
-    back = prospect_speed
-    distances = [0, 0]
-    tick.times.each do
-      forward = next_speed(forward, 1)
-      back = next_speed(back, -1)
-      distances[0] += forward
-      distances[1] += back
-    end
-    distances
-  end
-
   def my_past_position
     @my_past_position
   end
@@ -197,6 +184,7 @@ class Kubota
     team_message_received events['team_messages']
     robot_scanned events['robot_scanned'], time, true
     prospect_robots
+    eval_enemy_bullet events['robot_scanned']
     move_bullets
     move_enemy_bullets
     draw_gun_heading
@@ -204,7 +192,6 @@ class Kubota
     draw_bullets
     hit_log events['hit']
     got_hit_log events['got_hit']
-    eval_enemy_bullet events['robot_scanned']
     decide_move
     do_move
     decide_fire
@@ -1016,7 +1003,7 @@ class Kubota
             time: robot[:prev],
             start: bullet_start,
             robot: robot,
-            point: to_point(bullet_heading, BULLET_SPEED*(3 + time-robot[:prev]), bullet_start),
+            point: to_point(bullet_heading, BULLET_SPEED*(2 + time-robot[:prev]), bullet_start),
             heading: bullet_heading,
             speed: BULLET_SPEED,
             aim_type: :direct
@@ -1032,7 +1019,7 @@ class Kubota
             time: robot[:prev],
             start: bullet_start,
             robot: robot,
-            point: to_point(straight_bullet_heading, BULLET_SPEED*(3 + time-robot[:prev]), bullet_start),
+            point: to_point(straight_bullet_heading, BULLET_SPEED*(2 + time-robot[:prev]), bullet_start),
             heading: straight_bullet_heading,
             speed: BULLET_SPEED,
             aim_type: :straight
@@ -1042,7 +1029,7 @@ class Kubota
             time: robot[:prev],
             start: bullet_start,
             robot: robot,
-            point: to_point(accelerated_bullet_heading, BULLET_SPEED*(3 + time-robot[:prev]), bullet_start),
+            point: to_point(accelerated_bullet_heading, BULLET_SPEED*(2 + time-robot[:prev]), bullet_start),
             heading: accelerated_bullet_heading,
             speed: BULLET_SPEED,
             aim_type: :accelerated

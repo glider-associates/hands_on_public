@@ -241,27 +241,40 @@ class KubotaAdvance < Kubota
   end
 
   RATIO_DENOMINATOR = 3.0.freeze
+  UNKNOWN_MOVE_RATIO = 3.freeze
   def bullet_type_context(robot)
-    context_by_bullet_type = {}
-    recent_got_hits = []
+    current_context_by_bullet_type = {}
+    full_context_by_bullet_type = {}
     hit_count = 0
+    hit_count_unless_unknown = 0
+    current_hit_time = 0
     robot[:got_hit_logs].reverse.each do |got_hit_log|
-      hit_count += got_hit_log[:hit]
-      recent_got_hits << got_hit_log
-      break if hit_count >= RATIO_DENOMINATOR
-    end
-    recent_got_hits.each do |got_hit_log|
       bullet_type = got_hit_log[:bullet_type]
-      context_by_bullet_type[bullet_type] ||= {bullet_type: bullet_type, hit: 0, total: 0}
-      context_by_bullet_type[bullet_type][:hit] += got_hit_log[:hit]
-      context_by_bullet_type[bullet_type][:total] += 1.0
-      context_by_bullet_type[bullet_type][:ratio] = context_by_bullet_type[bullet_type][:hit] / RATIO_DENOMINATOR
+      if got_hit_log[:hit] > 0 and current_hit_time != got_hit_log[:time]
+        current_hit_time = got_hit_log[:time]
+        hit_count += 1.0
+        hit_count_unless_unknown += 1.0 unless bullet_type == :unknown
+      end
+      full_context_by_bullet_type[bullet_type] ||= {bullet_type: bullet_type, hit: 0, total: 0, ratio: 0, type_ratio: 0}
+      full_context_by_bullet_type[bullet_type][:hit] += got_hit_log[:hit]
+      full_context_by_bullet_type[bullet_type][:total] += 1.0
+      full_context_by_bullet_type[bullet_type][:ratio] = full_context_by_bullet_type[bullet_type][:hit] / full_context_by_bullet_type[bullet_type][:total]
+      full_context_by_bullet_type[bullet_type][:type_ratio] = full_context_by_bullet_type[bullet_type][:hit] / hit_count_unless_unknown if hit_count_unless_unknown > 0
+      next if hit_count > RATIO_DENOMINATOR
+      current_context_by_bullet_type[bullet_type] ||= {bullet_type: bullet_type, hit: 0, total: 0, ratio: 0}
+      current_context_by_bullet_type[bullet_type][:hit] += got_hit_log[:hit]
+      current_context_by_bullet_type[bullet_type][:total] += 1.0
+      current_context_by_bullet_type[bullet_type][:ratio] = current_context_by_bullet_type[bullet_type][:hit] / RATIO_DENOMINATOR
     end
-    highest = context_by_bullet_type.values.max do |a, b|
+    highest = current_context_by_bullet_type.values.max do |a, b|
       a[:ratio] <=> b[:ratio]
     end
-    return highest if highest and highest[:hit] >= 2 and highest[:ratio] >= 0.5
-    {bullet_type: :unknown, hit: recent_got_hits.length, total: recent_got_hits.length}
+    if highest and highest[:hit] >= 2 and highest[:ratio] >= 0.5 and \
+      ((full_context_by_bullet_type[highest[:bullet_type]][:ratio] > 0.5 and full_context_by_bullet_type[highest[:bullet_type]][:type_ratio] > 0.5) or
+       (robot[:num_fire] % UNKNOWN_MOVE_RATIO) != 0)
+      return highest
+    end
+    {bullet_type: :unknown, hit: hit_count, total: hit_count}
   end
 
   def move_other_bullets_bullet_type(robot, bullet, bullet_type_context)

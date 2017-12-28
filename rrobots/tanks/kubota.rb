@@ -184,13 +184,13 @@ class Kubota
     team_message_received events['team_messages']
     robot_scanned events['robot_scanned'], time, true
     prospect_robots
+    hit_log events['hit']
     eval_enemy_bullet events['robot_scanned']
     move_bullets
     move_enemy_bullets
     draw_gun_heading
     draw_other_bullets
     draw_bullets
-    hit_log events['hit']
     got_hit_log events['got_hit']
     decide_move
     do_move
@@ -997,6 +997,7 @@ class Kubota
         end
         if !crash and !on_the_wall?(robot[:prospect_point]) or (robot[:acceleration][:speed].abs < 1 and robot[:prospect_speed].abs > 1)
           # Maybe shoot
+          robot[:num_fire] += 1
           bullet_start = robot[:logs][-2][:prospect_point]
           bullet_heading = to_direction(bullet_start, my_past_position)
           @enemy_bullets << {
@@ -1107,7 +1108,7 @@ class Kubota
       bullet[:miss] = 1
     end
     if out_of_field?(bullet[:point]) or (time - bullet[:time]) > landing_ticks
-      if bullet[:miss]
+      if bullet[:miss] and last_enemy?
         robot[:got_hit_logs] << {
           time: time,
           bullet_type: bullet[:aim_type],
@@ -1266,6 +1267,7 @@ class Kubota
         logs: [],
         statistics: [],
         zombi_tick: 0,
+        num_fire: 0,
       }
       robot = @robots[scanned[:name]]
       robot[:tmp] = {}

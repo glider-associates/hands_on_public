@@ -327,6 +327,23 @@ def print_battlefield_results(battlefield, summary, options, match_no, print = t
   end
 end
 
+def print_final_result(results_order_by_score)
+  lines = Array.new(results_order_by_score.length + 2){''}
+  vertical_format lines[0], 0, "Name"
+  vertical_format lines[1], 0, "-------------------------------"
+  vertical_format lines[0], 20, "Win"
+  vertical_format lines[1], 20, "-----------"
+  vertical_format lines[0], 30, "Score"
+  vertical_format lines[1], 30, "-----------"
+  results_order_by_score.each_with_index do |result, index|
+    vertical_format lines[index + 2], 0, "#{result[:name]}"
+    vertical_format lines[index + 2], 20, "#{result[:win]}"
+    vertical_format lines[index + 2], 30, "#{'%.1f' % result[:score]}"
+  end
+  puts lines.join "\n"
+  puts
+end
+
 def print_league_result(summary_by_name, results_order_by_score)
   robot_names = results_order_by_score.map{|a| a[:name]}
   offset = 0
@@ -376,6 +393,8 @@ def dump_result(options, summary, summary_by_name)
 
   if options.league or options.hero
     print_league_result(summary_by_name, results_order_by_score)
+  else
+    print_final_result(results_order_by_score)
   end
 end
 

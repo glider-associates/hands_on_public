@@ -92,7 +92,7 @@ class RobotRunner
       }.first
       @x = leader.x
       @y = leader.y
-      teleport (@battlefield.width/4)-@size*2, (@battlefield.height/4)-@size*2, @size*2
+      teleport (@battlefield.width/3)-@size*2, (@battlefield.height/3)-@size*2, @size*2
     end
   end
 

@@ -48,7 +48,7 @@ class Yamaguchi
   def get_enemies_info
     @turn_radar_direction ||= MAX_ANGLE_OF_GUN
     @turn_gun_direction ||= 0
-    @avoid_angle *= -1 if rand < 0.8 unless events['got_hit'].empty?
+    @avoid_angle *= -1 if rand < 0.6 unless events['got_hit'].empty?
     @singular_points = {} if time == 0
     if events['robot_scanned'].empty?
       @turn_radar_direction = (0 < @turn_radar_direction ? 1 : -1) * MAX_ANGLE_OF_RADAR
@@ -130,16 +130,7 @@ class Yamaguchi
       hit_bonus = got_hit[:damage] * 2/3 if got_hit
       @target_angle = diff_direction({x: x, y: (battlefield_height - y)}, {x: log[:x], y: log[:y]})
       diff_energy = @log_by_robo[log[:name]][-2][:energy] - log[:energy] + hit_bonus
-      if (0.1..3).cover? diff_energy
-        @avoid_angle *= -1 if diff_energy > 2 and rand < 0.8
-        t = log[:distance] / BULLET_SPEED
-        @gravity_points[time] = {
-          x: x + speed * Math::cos(heading.to_rad) * t,
-          y: y - speed * Math::sin(heading.to_rad) * t,
-          power: 10,
-          expire: time + t
-        }
-      end
+      @avoid_angle *= -1 if diff_energy > 2 and rand < 0.6 if (0.1..3).cover? diff_energy
     end
     @log_by_robo.each do |name, logs|
       @gravity_points[name] = {
@@ -149,18 +140,16 @@ class Yamaguchi
         expire: logs.last[:time] + 60
       }
     end
-
     @avoid_angle ||= 90
-    @avoid_angle *= -1 if rand < 0.05
+    @avoid_angle *= -1 if rand < 0.08
     if @target_angle
       @gravity_points['randam'] = {
         x: x + 100 * Math::cos((optimize_angle(@target_angle + @avoid_angle)).to_rad),
         y: (battlefield_height - y) + 100 * Math::sin((optimize_angle(@target_angle + @avoid_angle)).to_rad),
-        power: 10,
+        power: 20 * rand,
         expire: time + 30
       }
     end
-
     if @log_by_robo[@aim] and @log_by_robo[@aim].last[:energy].to_f < 1
       @gravity_points[@aim] = {
         x: @log_by_robo[@aim].last[:x],
@@ -261,7 +250,7 @@ class Yamaguchi
     @turn_gun_direction = optimize_angle @turn_gun_direction
     if @turn_gun_direction.abs <= 30 and gun_heat < 0.1 and !@pre_fire
       @will_fire = true
-      @long_distance = target[:distance] > 1500
+      @long_distance = target[:distance] > 1000
       @aim = target[:name]
       @expected_hits << {
         time: time + time_to_be_hit,

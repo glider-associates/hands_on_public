@@ -4,7 +4,7 @@ class Sekine
   include Robot
 
   LOST_TICK = 30
-  MAX_HISTORY_SIZE = 1000
+  MAX_HISTORY_SIZE = 0
   MAX_BULLET_POWER = 3.0
   MAX_SPEED = 8
   NORMAL_SPEED = 4
@@ -13,14 +13,14 @@ class Sekine
   MAX_TURN = 10.to_rad
   BULLET_SPPED = 30
   DEFAULT_KEEPED_DISTANCE = 600
-  NEALY_DISTANCE = 200
+  NEALY_DISTANCE = 300
   WALL_DISTANCE_LIMIT = 0.3
-  DEFAULT_TURN_TIME = 120
-  EMERGENCY_TIME = 15
+  DEFAULT_TURN_TIME = 100
+  EMERGENCY_TIME = 12
 
-  def position(x_positioin = nil, y_positioin = nil)
-    { x: x_positioin || x, y: y_positioin || y }
-  end
+  PATTERN_MATCHING = 50
+  TURN_RAND_RATIO = 0.0
+
 
   def before_start
     @enable_log = false
@@ -39,7 +39,8 @@ class Sekine
     @direction = 1
     @emergency = 0
     @will_fire = 0
-    @bullet_power = 1.5
+    @last_fired = 0
+    @bullet_power = 3
 
     term_frame
   end
@@ -56,10 +57,19 @@ class Sekine
       min_distance = nil
       events['robot_scanned'].each do |scanned|
         scanned[:time] = time
+        scanned[:fired] = @will_fire
         scanned[:position] = to_position(scanned[:direction].to_rad, scanned[:distance], @current_position)
         @histories[scanned[:name]] ||= []
+        last_event = @histories[scanned[:name]].last
+        unless last_event.nil?
+          scanned[:vector] = vector(last_event[:position], scanned[:position])
+          unless last_event[:vector].nil?
+            scanned[:direction_diff] = normalize_radian(scanned[:vector][:direction] - last_event[:vector][:direction])
+            scanned[:distance_diff] = (scanned[:vector][:distance] - last_event[:vector][:distance])
+          end
+        end
         @histories[scanned[:name]] << scanned
-        @histories[scanned[:name]].shift if @histories[scanned[:name]].size > MAX_HISTORY_SIZE
+        @histories[scanned[:name]].shift if MAX_HISTORY_SIZE > 0 and @histories[scanned[:name]].size > MAX_HISTORY_SIZE
         if min_distance.nil? or min_distance > scanned[:distance]
           @target = scanned[:name]
           min_distance = scanned[:distance]
@@ -87,6 +97,11 @@ class Sekine
     @last_energy = energy
   end
 
+  def target_events
+    return nil if @histories[@target].nil?
+    @histories[@target]
+  end
+
   def last_target_events(count = 1)
     return nil if @histories[@target].nil?
     count = [count, @histories[@target].size].min
@@ -95,20 +110,20 @@ class Sekine
 
   def enemy_shot?
     # TODO: exclude my shot!
-    target_events = last_target_events(2)
-    return false if target_events.nil? or target_events.size < 2
-    r = (target_events[0][:energy] - target_events[1][:energy]) > 2.0 and (@last_energy > energy and !@last_fired)
-    log "enemy_shot?" if r
+    events = last_target_events(2)
+    return false if events.nil? or events.size < 2
+    r = (events[0][:energy] - events[1][:energy]) > 0.0 and (@last_energy > energy and @last_fired > 0)
+    # log "enemy_shot?" if r
     r
   end
 
   def search
-    target_events = last_target_events(2)
+    events = last_target_events(2)
     radar_direction = 0
-    if target_events.nil? or target_events.last[:time] < time - LOST_TICK
+    if events.nil? or events.last[:time] < time - LOST_TICK
       radar_direction += MAX_RADAR_TURN
     else
-      last_event = target_events.last
+      last_event = events.last
       if last_event[:time] == time
         radar_direction = normalize_radian(last_event[:direction].to_rad - radar_heading.to_rad)
         offset = Math.atan2(MAX_SPEED * 5, last_event[:distance])
@@ -125,34 +140,114 @@ class Sekine
     @will_turn_radar = radar_direction
   end
 
+  def linear_moving(tick_for_hit)
+    events = last_target_events(tick_for_hit)
+    a = events.first
+    b = events.last
+    if a[:position] == b[:position]
+      a[:position]
+    else
+      enemy_direction = normalize_radian(to_direction(a[:position], b[:position]))
+      move_distance = distance(a[:position], b[:position])
+      to_position(enemy_direction, move_distance * tick_for_hit / (b[:time] - a[:time]), b[:position])
+    end
+  end
+
+  def simple_moving(tick_for_hit)
+    events = last_target_events(tick_for_hit)
+    return nil  if events.size < tick_for_hit
+
+    total_tick = 0
+    total_vector = { direction: 0, distance: 0 }
+    prev_event = nil
+    events.each do |event|
+      unless event[:direction_diff].nil? or prev_event.nil? or prev_event[:direction_diff].nil?
+        total_tick += event[:time] - prev_event[:time]
+        total_vector[:direction] += event[:direction_diff]
+        total_vector[:distance] += event[:vector][:distance]
+      end
+      prev_event = event
+    end
+    return nil if total_tick <= 0
+
+    average_vector = {
+      direction: normalize_radian(total_vector[:direction] / total_tick),
+      distance: total_vector[:distance] / total_tick,
+    }
+    future_event = events.last.dup
+    tick_for_hit.times do
+      future_event[:vector] = { direction: future_event[:vector][:direction] + average_vector[:direction], distance: average_vector[:distance] }
+      future_event[:position] = to_position(future_event[:vector][:direction], future_event[:vector][:distance], future_event[:position])
+    end
+    future_event[:position]
+  end
+
+  def mismatching_ratio(a, b)
+    distance_diff = (b[:distance_diff] - a[:distance_diff]) ** 2
+    direction_diff = normalize_radian(b[:direction_diff] - a[:direction_diff]) ** 2
+    distance_diff + direction_diff
+  end
+
+  def pattern_moving(tick_for_hit)
+    target_histories = target_events
+    events = last_target_events(PATTERN_MATCHING)
+
+    nealy = nil
+    current_position = target_histories.size - tick_for_hit - 1
+    loop do
+      check_position = current_position - events.size
+      break if check_position <= 1
+
+      total_ratio = 0.0
+      events.each do |event|
+        ratio = mismatching_ratio(target_histories[check_position], event)
+        if ratio > 0.01 * PATTERN_MATCHING
+          total_ratio = nil
+          break
+        else
+          total_ratio += ratio
+        end
+        check_position += 1
+      end
+
+      unless total_ratio.nil?
+        if nealy.nil? or nealy[:total_ratio] > total_ratio
+          nealy = {
+            total_ratio: total_ratio,
+            position: current_position
+          }
+          break if nealy[:total_ratio] < 0.01 * PATTERN_MATCHING
+        end
+      end
+
+      current_position -= 1
+    end
+
+    return nil if nealy.nil?
+
+    future_event = events.last.dup
+    tick_for_hit.times do |index|
+      event = target_histories[nealy[:position] + index]
+      future_event[:vector] = { direction: future_event[:vector][:direction] + event[:direction_diff], distance: event[:vector][:distance] }
+      future_event[:position] = to_position(future_event[:vector][:direction], future_event[:vector][:distance], future_event[:position])
+    end
+    future_event[:position]
+  end
+
   def aiming
     gun_direction = nil
     last_event = last_target_events&.last
     unless last_event.nil?
       distnace_to_enemy = last_event[:distance]
       tick_for_hit = (distnace_to_enemy / BULLET_SPPED).ceil.to_i + 1
-      target_events = last_target_events(tick_for_hit)
-      if target_events.size < tick_for_hit or true
-        a = target_events.first
-        b = target_events.last
-        if a[:position] == b[:position]
-          future_position = a[:position]
-        else
-          enemy_direction = normalize_radian(to_direction(a[:position], b[:position]))
-          move_distance = distance(a[:position], b[:position])
-          future_position = to_position(enemy_direction, move_distance * tick_for_hit / (b[:time] - a[:time]), b[:position])
-        end
+      future_position = pattern_moving(tick_for_hit)
+      future_position ||= simple_moving(tick_for_hit)
+      future_position ||= linear_moving(tick_for_hit)
+
+      unless future_position.nil?
         draw_point_rect(future_position)
         gun_direction = normalize_radian(to_direction(@current_position, future_position) - gun_heading.to_rad)
-
         @will_fire = (distnace_to_enemy < NEALY_DISTANCE) ? MAX_BULLET_POWER : @bullet_power if gun_direction.abs < 0.001
-      else
-        # TODO: 
-        # vectors = []
-        # target_events.each do |event|
-
-        # end
-        # gun_direction = normalize_radian(target_events.last[:direction].to_rad - gun_heading.to_rad)
       end
 
       unless gun_direction.nil?
@@ -188,12 +283,14 @@ class Sekine
   end
 
   def move
-    if @next_turn_time <= time and @emergency <= 0
-      head_direction
-      @last_turn_time = time
-      @next_turn_time = time + DEFAULT_TURN_TIME * (rand + 0.5)
-    elsif @emergency > 0
-#      head_direction
+    if @next_turn_time <= time
+      if @emergency <= 0
+        head_direction
+        @last_turn_time = time
+        @next_turn_time = time + DEFAULT_TURN_TIME * (rand + TURN_RAND_RATIO)
+      else
+        @direction *= -1
+      end
     end
 
     tick = time - @last_turn_time
@@ -233,12 +330,8 @@ class Sekine
     init if time == 0
     init_frame(events)
 
-    if @will_fire > 0
-      fire @will_fire
-      @last_fired = true
-    else
-      @last_fired = false
-    end
+    fire @will_fire if @will_fire > 0
+    @last_fired = @will_fire
 
     search
     aiming
@@ -249,6 +342,16 @@ class Sekine
   end
 
   private
+
+  def position(x_positioin = nil, y_positioin = nil)
+    { x: x_positioin || x, y: y_positioin || y }
+  end
+
+  def vector(a, b)
+    return { direction: 0, distance: 0 } if a[:x] == b[:x] and a[:y] == b[:y]
+    { direction: normalize_radian(to_direction(a, b)), distance: distance(a, b) }
+  end
+
   def log(*msg)
     puts "#{time}: #{msg.join ' '}" if @enable_log
   end
@@ -259,6 +362,7 @@ class Sekine
   end
 
   def normalize_radian(radian)
+    return radian if radian == 0
     sign = radian / radian.abs
     radian -= sign * Math::PI * 2 while radian.abs > Math::PI
     radian
@@ -272,6 +376,10 @@ class Sekine
 
   def add_position(a, b)
     { x: a[:x] + b[:x], y: a[:y] + b[:y] }
+  end
+
+  def to_position_by_vector(vector, base = nil)
+    to_position(vector[:direction], vector[:distance], base)
   end
 
   def to_position(radian, distance, base = nil)

@@ -15,6 +15,7 @@ class Yamaguchi
   MIN_ROBO_VELOCITY = -8
   ASSALT_ATTACK_ENERGY_THRESHOLD = 1.0
   ANALYSIS_TICK = 18
+  ROBO_SIZE = 80
 
   def initialize
     @logg = Logger.new(STDOUT)
@@ -32,14 +33,22 @@ class Yamaguchi
     @attack_preparation_period = 0
     @expected_hits = []
     @attack_mode = nil
+    @shot_time = 0
+    @dodge_score = {
+      stay: 0,
+      one_progress: 0,
+      two_progress: 0,
+      three_progress: 0,
+      one_back: 0,
+    }
   end
 
   def tick(events)
+    attack
     push_logs
     set_run_params
     set_attack_params
     run
-    attack
   end
 
   def push_logs
@@ -65,8 +74,20 @@ class Yamaguchi
           end
         end
         expected_hit = @expected_hits.select{ |info| info[:robo] == robo_name and info[:time] == time}.first
-        expected_hit[:diff_x] = @log_by_robo[robo_name].last[:x] - expected_hit[:pre_x]
-        expected_hit[:diff_y] = @log_by_robo[robo_name].last[:y] - expected_hit[:pre_y]
+        return unless expected_hit
+        close_strategy = nil
+        diff = battlefield_width
+        @dodge_score.keys.each do |strategy|
+          if diff > Math::hypot(expected_hit[strategy][:x] - @log_by_robo[robo_name].last[:x], expected_hit[strategy][:y] - @log_by_robo[robo_name].last[:y])
+            diff = Math::hypot(expected_hit[strategy][:x] - @log_by_robo[robo_name].last[:x], expected_hit[strategy][:y] - @log_by_robo[robo_name].last[:y])
+            close_strategy = strategy
+          end
+        end
+        @dodge_score.keys.each do |strategy|
+          if strategy == close_strategy
+            @dodge_score[strategy] += 1
+          end
+        end
       end
     end
   end
@@ -84,14 +105,14 @@ class Yamaguchi
         hit_bonus = got_hit[:damage] * 2/3 if got_hit
         @target_angle = diff_direction({x: x, y: (battlefield_height - y)}, {x: log[:x], y: log[:y]})
         diff_energy = @log_by_robo[log[:name]][-2][:energy] - log[:energy] + hit_bonus
-        @avoid_angle *= -1 if (0.1..3).cover? diff_energy and rand < 0.6
+        @avoid_angle *= -1 if (1..3).cover? diff_energy and rand < 0.8
       end
     end
     @log_by_robo.each do |name, logs|
       @gravity_by_points[name] = {
         x: logs.last[:x],
         y: logs.last[:y],
-        power: 80,
+        power: 120,
         expire: logs.last[:time] + 1
       }
     end
@@ -115,25 +136,25 @@ class Yamaguchi
     @gravity_by_points[:top_wall] = {
         x: x,
         y: battlefield_height,
-        power: 10,
+        power: 20,
         expire: time + 1
       }
     @gravity_by_points[:bottom_wall] = {
         x: x,
         y: 0,
-        power: 10,
+        power: 20,
         expire: time + 1
       }
     @gravity_by_points[:left_wall] = {
         x: 0,
         y: battlefield_height - y,
-        power: 10,
+        power: 20,
         expire: time + 1
       }
     @gravity_by_points[:right_wall] = {
         x: battlefield_width,
         y: battlefield_height - y,
-        power: 10,
+        power: 20,
         expire: time + 1
       }
     @gravity_by_points.each do |name, gravity|
@@ -156,26 +177,38 @@ class Yamaguchi
   def set_attack_params
     target = @log_by_robo.map { |robo_name, logs| time == logs.last[:time] ? [robo_name, logs.last] : nil }.compact.min_by { |robo_name, log| log[:distance] }
     return if !target
-    @short_distance = target.last[:distance] < 300
+    @distance = target.last[:distance]
     @aim = target.first
-    set_attack_params_for_kamikaze
+    if !@attack_mode || @attack_mode == :kamikaze
+      set_attack_params_for_kamikaze
+    end
     if !@attack_mode || @attack_mode == :pattern
       set_attack_params_by_pattern
     end
     if !@attack_mode || @attack_mode == :dodge
       set_attack_params_by_dodge_bullet
     end
-    if @alignment_x and @alignment_y
+    if @attack_mode and @alignment_x and @alignment_y
       @attack_preparation_period += 1
       @turn_gun_direction = optimize_angle(diff_direction( {x: x, y: battlefield_height - y}, {x: @alignment_x, y: @alignment_y} ) - gun_heading - @turn_direction)
       time_to_be_hit = Math::hypot(@alignment_x - x, @alignment_y - (battlefield_height - y)) / BULLET_VELOCITY
-      if (time + time_to_be_hit > @alignment_time + 1) and @turn_gun_direction.abs <= MAX_ANGLE_OF_GUN and gun_heat < 0.1
+      if (time + time_to_be_hit > @alignment_time + 1) and @turn_gun_direction.abs <= MAX_ANGLE_OF_GUN and gun_heat <= 0.2 and (time - @shot_time) > 3
         @will_fire = true
+        @shot_time = time
+        direction = diff_direction( {x: x, y: battlefield_height - y}, {x: @log_by_robo[@aim].last[:x], y: @log_by_robo[@aim].last[:y]} )
+        heading = ((direction + 90) - @log_by_robo[@aim].last[:heading]).abs < ((direction - 90) - @log_by_robo[@aim].last[:heading]).abs ? direction + 90 : direction - 90
+        one_progress =  {x: @log_by_robo[@aim].last[:x] + (ROBO_SIZE * Math.cos(heading.to_rad)), y: @log_by_robo[@aim].last[:y] + (ROBO_SIZE * Math.sin(heading.to_rad))}
+        two_progress = {x: @log_by_robo[@aim].last[:x] + (ROBO_SIZE * 2 * Math.cos(heading.to_rad)), y: @log_by_robo[@aim].last[:y] + (ROBO_SIZE * 2 * Math.sin(heading.to_rad))}
+        three_progress = {x: @log_by_robo[@aim].last[:x] + (ROBO_SIZE * 3 * Math.cos(heading.to_rad)), y: @log_by_robo[@aim].last[:y] + (ROBO_SIZE * 3 * Math.sin(heading.to_rad))}
+        one_back = {x: @log_by_robo[@aim].last[:x] + (ROBO_SIZE * Math.cos((heading - 180).to_rad)), y: @log_by_robo[@aim].last[:y] + (ROBO_SIZE * Math.sin((heading - 180).to_rad))}
         @expected_hits << {
           robo: @aim,
           time: (time + time_to_be_hit).round,
-          pre_x: @log_by_robo[@aim].last[:x],
-          pre_y: @log_by_robo[@aim].last[:y],
+          stay: {x: @log_by_robo[@aim].last[:x], y: @log_by_robo[@aim].last[:y]},
+          one_progress: one_progress,
+          two_progress: two_progress,
+          three_progress: three_progress,
+          one_back: one_back,
         }
       end
       @turn_gun_direction = round_whithin_range @turn_gun_direction, MIN_ANGLE_OF_GUN..MAX_ANGLE_OF_GUN
@@ -184,15 +217,17 @@ class Yamaguchi
 
   def set_attack_params_for_kamikaze
     logs = @log_by_robo[@aim]
-    return if logs.size < 8
+    return if logs.size < ANALYSIS_TICK + 1
     dist = 0
-    -7.upto(-1) do |index|
+    (ANALYSIS_TICK * -1).upto(-1) do |index|
       dist += (Math::hypot(logs[index - 1][:my_x] - logs[index][:x], logs[index - 1][:my_y] - logs[index][:y]) - Math::hypot(logs[index - 1][:my_x] - logs[index - 1][:x], logs[index - 1][:my_y] - logs[index - 1][:y]))
     end
-    if dist < -30 || @short_distance
+    if dist < (ANALYSIS_TICK * -6) || (@distance < 420) || @attack_mode == :kamikaze
       @alignment_time = time
-      @alignment_x = logs.last[:x]
-      @alignment_y = logs.last[:y]
+      adjust_tick = (@distance / 100)
+      heading = optimize_angle(logs.last[:heading] + logs.last[:angular_velocity] * adjust_tick)
+      @alignment_x = logs.last[:x] + (logs.last[:velocity] * Math::cos(heading.to_rad)) * adjust_tick
+      @alignment_y = logs.last[:y] + (logs.last[:velocity] * Math::sin(heading.to_rad)) * adjust_tick
       @attack_mode = :kamikaze
     end
   end
@@ -209,7 +244,7 @@ class Yamaguchi
       @aim_velocity = logs.last[:velocity]
       recent_logs = logs.last(ANALYSIS_TICK)
       similar_index = 0
-      min_score = 30
+      min_score = ANALYSIS_TICK
       similar_time = nil
       (logs.size - ANALYSIS_TICK - 1).times do |i|
         next if !logs[i][:angular_velocity] || !logs[i][:acceleration]
@@ -254,11 +289,27 @@ class Yamaguchi
   end
 
   def set_attack_params_by_dodge_bullet
-    dodge_point = @expected_hits.select{ |expected_hit| expected_hit[:robo] == @aim and expected_hit[:diff_x] and expected_hit[:diff_y] }.max_by { |expected_hit| expected_hit[:time] }
-    return unless dodge_point
+    return if @log_by_robo[@aim].size < 10
+    dodge = @dodge_score.max{ |a, b| a.last <=> b.last }.first
+    # @logg.debug dodge
+    # DRY
+    direction = diff_direction( {x: x, y: battlefield_height - y}, {x: @log_by_robo[@aim].last[:x], y: @log_by_robo[@aim].last[:y]} )
+    heading = ((direction + 90) - @log_by_robo[@aim].last[:heading]).abs < ((direction - 90) - @log_by_robo[@aim].last[:heading]).abs ? direction + 90 : direction - 90
+    one_progress =  {x: @log_by_robo[@aim].last[:x] + (ROBO_SIZE * Math.cos(heading.to_rad)), y: @log_by_robo[@aim].last[:y] + (ROBO_SIZE * Math.sin(heading.to_rad))}
+    two_progress = {x: @log_by_robo[@aim].last[:x] + (ROBO_SIZE * 2 * Math.cos(heading.to_rad)), y: @log_by_robo[@aim].last[:y] + (ROBO_SIZE * 2 * Math.sin(heading.to_rad))}
+    three_progress = {x: @log_by_robo[@aim].last[:x] + (ROBO_SIZE * 3 * Math.cos(heading.to_rad)), y: @log_by_robo[@aim].last[:y] + (ROBO_SIZE * 3 * Math.sin(heading.to_rad))}
+    one_back = {x: @log_by_robo[@aim].last[:x] + (ROBO_SIZE * Math.cos((heading - 180).to_rad)), y: @log_by_robo[@aim].last[:y] + (ROBO_SIZE * Math.sin((heading - 180).to_rad))}
+    aa = {
+      'stay': {x: @log_by_robo[@aim].last[:x], y: @log_by_robo[@aim].last[:y]},
+      'one_progress': one_progress,
+      'two_progress': two_progress,
+      'three_progress': three_progress,
+      'one_back': one_back,
+    }
+
     @alignment_time = time
-    @alignment_x = @log_by_robo[@aim].last[:x] + dodge_point[:diff_x]
-    @alignment_y = @log_by_robo[@aim].last[:y] + dodge_point[:diff_y]
+    @alignment_x = aa[dodge][:x]
+    @alignment_y = aa[dodge][:y]
     @attack_mode = :dodge
   end
 
@@ -275,7 +326,7 @@ class Yamaguchi
     remaining_energy = @log_by_robo[@aim].last[:energy]
     return if remaining_energy < ASSALT_ATTACK_ENERGY_THRESHOLD
     @size_of_bullet = nil
-    @size_of_bullet = 3 if @short_distance
+    @size_of_bullet = 3 if @distance < 420
     @size_of_bullet = 1 if remaining_energy < 1 && energy < 8
     @size_of_bullet ||= (remaining_energy > 20 ? 3 : remaining_energy/3.3 - ASSALT_ATTACK_ENERGY_THRESHOLD)
     fire @size_of_bullet

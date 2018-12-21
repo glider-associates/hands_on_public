@@ -15,7 +15,7 @@ class Yamaguchi
   MAX_ROBO_VELOCITY = 8
   MIN_ROBO_VELOCITY = -8
   ANALYSIS_TICK = 18
-  ROBO_SIZE = 60
+  ROBO_SIZE = 60.0
   ASSALT_ATACK_ENERGY_THRESHOLD = 1.0
   ZONBI_ENERGY_THRESHOLD = 0.3
 
@@ -40,9 +40,9 @@ class Yamaguchi
     @will_fire = false
     @already_first_shot = false
     @avoid_point_by_pattern = {
-      one_progress: {score: 0, length: ROBO_SIZE},
-      two_progress: {score: 0, length: ROBO_SIZE * 2},
-      one_back: {score: 0, length: ROBO_SIZE * -1},
+      one_progress: {score: 0.0, length: ROBO_SIZE * 0.8},
+      two_progress: {score: 0.0, length: ROBO_SIZE * 1.8},
+      one_back: {score: 0.0, length: ROBO_SIZE * -0.8},
     }
     @attack_ratio_by_pattern = {
       kamikaze: {shot: 0.0, hit: 0.0},
@@ -122,7 +122,7 @@ class Yamaguchi
         hit_bonus = got_hit[:damage] * 2/3 if got_hit
         @target_angle = diff_direction({x: x, y: (battlefield_height - y)}, {x: logs.last[:x], y: logs.last[:y]})
         diff_energy = logs[-2][:energy] - logs.last[:energy] + hit_bonus
-        if (0.5..3).cover? diff_energy
+        if (0.1..3).cover? diff_energy
           min_score = 1000
           @avoid_point_by_pattern.each do |key, value|
             min_score = value[:score] if min_score > value[:score]
@@ -161,33 +161,17 @@ class Yamaguchi
         x: avoid_x,
         y: avoid_y,
         power: -20,
-        expire: arrival_time + 6,
-      }
-    elsif rand < 0.005 and @target_angle
-      dir = (rand < 0.5 ? 1: -1)
-      @gravity_point['random'] = {
-        x: x + 100 * Math::cos((optimize_angle(@target_angle + 90)).to_rad) * dir,
-        y: (battlefield_height - y) + 100 * Math::sin((optimize_angle(@target_angle + 90)).to_rad) * dir,
-        power: 10,
-        expire: time + 8,
+        expire: arrival_time,
       }
     end
-    if @logs_by_robo[@aim] and @logs_by_robo[@aim].last[:energy].to_f < ASSALT_ATACK_ENERGY_THRESHOLD
+    if (@logs_by_robo[@aim] and @logs_by_robo[@aim].last[:energy].to_f < ASSALT_ATACK_ENERGY_THRESHOLD) or \
+      (@logs_by_robo[@aim] and @logs_by_robo[@aim].last[:energy].to_f < 5.0 and energy > 16.0 and @distance < 400)
       @gravity_point[@aim] = {
         x: @logs_by_robo[@aim].last[:x],
         y: @logs_by_robo[@aim].last[:y],
         power: -200,
         expire: time
       }
-      if @logs_by_robo[@aim] and @logs_by_robo[@aim].last[:energy].to_f > ZONBI_ENERGY_THRESHOLD
-        dir = (rand < 0.5 ? 1: -1)
-        @gravity_point['random'] = {
-          x: x + 100 * Math::cos((optimize_angle(@target_angle + 90)).to_rad) * dir,
-          y: (battlefield_height - y) + 100 * Math::sin((optimize_angle(@target_angle + 90)).to_rad) * dir,
-          power: 10,
-          expire: time
-        }
-      end
     end
     @gravity_point[:top_wall] = {
         x: x,
@@ -348,19 +332,16 @@ class Yamaguchi
     return if !@will_fire || num_robots < 2
     remaining_energy = @logs_by_robo[@aim].last[:energy]
     return if remaining_energy < ZONBI_ENERGY_THRESHOLD
-    return if remaining_energy < 3.0 and @distance > 400
-    @size_of_bullet = nil
+    if energy < 1.0
+      return if @distance > 300
+      @size_of_bullet = 3
+    end
     if @distance < 400
       @size_of_bullet = 3
     elsif !@already_first_shot
       @size_of_bullet = 1
     else
-      @size_of_bullet = (remaining_energy > 20 ? 3 : ((remaining_energy - ZONBI_ENERGY_THRESHOLD) / 3.3) - 0.1 )
-      if @attack_mode == :pattern
-        @size_of_bullet = @size_of_bullet * (@attack_ratio_by_pattern[:pattern][:hit] / @attack_ratio_by_pattern[:pattern][:shot]) + 0.5
-      elsif @attack_mode == :reaction
-        @size_of_bullet = @size_of_bullet * (@attack_ratio_by_pattern[:reaction][:hit] / @attack_ratio_by_pattern[:reaction][:shot]) + 0.5
-      end
+      @size_of_bullet = (remaining_energy > 10 ? 3 : (remaining_energy - ZONBI_ENERGY_THRESHOLD) / 3.3) - ASSALT_ATACK_ENERGY_THRESHOLD
     end
     fire @size_of_bullet
     @already_first_shot ||= true
@@ -372,7 +353,7 @@ class Yamaguchi
     return nil if @attack_ratio_by_pattern[:pattern][:shot] < 5 or @attack_ratio_by_pattern[:reaction][:shot] < 5
     pattern_hit_ratio = @attack_ratio_by_pattern[:pattern][:hit] / @attack_ratio_by_pattern[:pattern][:shot]
     reaction_hit_ratio = @attack_ratio_by_pattern[:reaction][:hit] / @attack_ratio_by_pattern[:reaction][:shot]
-    if (pattern_hit_ratio / reaction_hit_ratio) > 1.4
+    if (pattern_hit_ratio / reaction_hit_ratio) > 1.6
       :reaction
     elsif (reaction_hit_ratio / pattern_hit_ratio) > 1.2
       :pattern

@@ -125,7 +125,7 @@ class Yamaguchi
         hit_bonus = got_hit[:damage] * 2/3 if got_hit
         diff_energy = logs[-2][:energy] - logs.last[:energy] + hit_bonus
         if (0.1..3).cover? diff_energy
-          my_heading = speed > 0 ? heading : heading + 180
+          my_heading = @acceleration > 0 ? heading : heading + 180
           my_heading -= 360 if my_heading > 360
           direction = calc_direction( {x: x, y: battlefield_height - y}, {x: logs.last[:x], y: logs.last[:y]} ) + 90
           direction -= 360 if direction > 360

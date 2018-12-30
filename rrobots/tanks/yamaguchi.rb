@@ -367,6 +367,7 @@ class Yamaguchi
       @size_of_bullet = 1
     else
       @size_of_bullet = ((remaining_energy > 10 or energy < 15) ? 3 : (remaining_energy - ZONBI_ENERGY_THRESHOLD) / 3.3) - ASSALT_ATACK_ENERGY_THRESHOLD
+      @size_of_bullet = 0.1 if @size_of_bullet < 0.1
     end
     fire @size_of_bullet
     @already_first_shot ||= true

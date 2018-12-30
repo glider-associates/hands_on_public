@@ -19,6 +19,7 @@ class Yamaguchi
   ASSALT_ATACK_ENERGY_THRESHOLD = 1.0
   ZONBI_ENERGY_THRESHOLD = 0.3
   SHORT_DISTANCE_THRESHOLD = 400
+  BIG_BULLET_SIZE_THRESHOLD = 1.5
 
   def initialize
     @logger = Logger.new(STDOUT)
@@ -40,6 +41,7 @@ class Yamaguchi
     @attack_mode = nil
     @will_fire = false
     @already_first_shot = false
+    @got_hit_now = false
     @avoid_point_by_pattern = {
       one_progress: {score: 0.0, length: ROBO_SIZE * 1.0},
       two_progress: {score: 0.0, length: ROBO_SIZE * 1.8},
@@ -101,6 +103,7 @@ class Yamaguchi
     if got_hit_log
       got_hit_log[:time] = time
       @got_hit_logs << got_hit_log
+      @got_hit_now = true if got_hit_log[:damage] > (BIG_BULLET_SIZE_THRESHOLD * 3.3)
     end
     arrived_shot = @received_shot_points.select{ |received_shot| time == received_shot[:arrival_time] + 8 }.first
     if arrived_shot
@@ -115,51 +118,53 @@ class Yamaguchi
   def set_run_params
     @x_gravity = 0
     @y_gravity = 0
-    idling = (!@gravity_point['avoid'] or @gravity_point['avoid'][:expire] < time or @gravity_point['avoid'][:bullet_size] < 1.5)
+    idling = (!@gravity_point['avoid'] or @gravity_point['avoid'][:expire] < time or @gravity_point['avoid'][:bullet_size] < BIG_BULLET_SIZE_THRESHOLD)
     target = @logs_by_robo.map { |robo_name, logs| time == logs.last[:time] ? [robo_name, logs.last] : nil }.compact.min_by { |robo_name, log| log[:distance] }
-    if target and idling
+    if target
       logs = @logs_by_robo[target.first]
-      if logs.size > ANALYSIS_TICK
+      if idling and logs.size > ANALYSIS_TICK
         hit_bonus = 0
         got_hit = events['got_hit'].first
         hit_bonus = got_hit[:damage] * 2/3 if got_hit
         diff_energy = logs[-2][:energy] - logs.last[:energy] + hit_bonus
-        if (0.1..3).cover? diff_energy
-          my_heading = @acceleration > 0 ? heading : heading + 180
-          my_heading -= 360 if my_heading > 360
-          direction = calc_direction( {x: x, y: battlefield_height - y}, {x: logs.last[:x], y: logs.last[:y]} ) + 90
-          direction -= 360 if direction > 360
-          direction = diff_direction(my_heading, direction) < 90 ? direction : direction + 180
-          direction -= 360 if direction > 360
-          tune_direction_time = (diff_direction(direction, my_heading) / 10).ceil
-          deferment = (logs.last[:distance] / BULLET_VELOCITY).ceil
-          to_max_time = 8 - speed.abs
-          dt = deferment - tune_direction_time
-          enable_avoid_pattern = @avoid_point_by_pattern.select do |key, value|
-            if 0 < value[:length]
-              value[:length] < ((speed.abs * to_max_time) + 0.5 * to_max_time ** 2) + (MAX_ROBO_VELOCITY * (dt - to_max_time))
-            else
-              value[:length] > ((speed.abs ** 2) + -0.5 * speed.abs ** 2) - 32 - (MAX_ROBO_VELOCITY * (dt - speed.abs - 8))
-            end
+      end
+      if (0.1..3).cover? diff_energy or @got_hit_now
+        @got_hit_now = false
+        my_heading = speed > 0 ? heading : heading + 180
+        my_heading -= 360 if my_heading > 360
+        direction = calc_direction( {x: x, y: battlefield_height - y}, {x: logs.last[:x], y: logs.last[:y]} ) + 90
+        direction -= 360 if direction > 360
+        direction = diff_direction(my_heading, direction) < 90 ? direction : direction + 180
+        direction -= 360 if direction > 360
+        tune_direction_time = (diff_direction(direction, my_heading) / 10).ceil
+        deferment = (logs.last[:distance] / BULLET_VELOCITY).ceil
+        to_max_time = 8 - speed.abs
+        dt = deferment - tune_direction_time
+        enable_avoid_pattern = @avoid_point_by_pattern.select do |key, value|
+          if 0 < value[:length]
+            value[:length] < ((speed.abs * to_max_time) + 0.5 * to_max_time ** 2) + (MAX_ROBO_VELOCITY * (dt - to_max_time))
+          else
+            value[:length] > ((speed.abs ** 2) + -0.5 * speed.abs ** 2) - 32 - (MAX_ROBO_VELOCITY * (dt - speed.abs - 8))
           end
-          min_score = 1000
-          enable_avoid_pattern.each do |key, value|
-            min_score = value[:score] if min_score > value[:score]
-          end
-          avoid_pattern = enable_avoid_pattern.select{ |key, value| value[:score] == min_score }.keys.sample
-          avoid_pattern ||= :one_progress
-          avoid_x = x + @avoid_point_by_pattern[avoid_pattern][:length] * Math::cos((optimize_angle(direction)).to_rad)
-          avoid_y = (battlefield_height - y) + @avoid_point_by_pattern[avoid_pattern][:length] * Math::sin((optimize_angle(direction)).to_rad)
-          arrival_time = time + (Math::hypot(logs.last[:x] - avoid_x, logs.last[:y] - (battlefield_height - avoid_y)) / BULLET_VELOCITY).round
-          if Math::hypot(logs.last[:x] - x, logs.last[:y] - (battlefield_height - y)) > SHORT_DISTANCE_THRESHOLD
-            @received_shot_points << {
-              time: time,
-              x: x,
-              y: battlefield_height - y,
-              arrival_time: arrival_time,
-              avoid_pattern: avoid_pattern,
-            }
-          end
+        end
+        enable_avoid_pattern.delete(@received_shot_points.last[:avoid_pattern]) if @got_hit_now
+        min_score = 1000
+        enable_avoid_pattern.each do |key, value|
+          min_score = value[:score] if min_score > value[:score]
+        end
+        avoid_pattern = enable_avoid_pattern.select{ |key, value| value[:score] == min_score }.keys.sample
+        avoid_pattern ||= :one_progress
+        avoid_x = x + @avoid_point_by_pattern[avoid_pattern][:length] * Math::cos((optimize_angle(direction)).to_rad)
+        avoid_y = (battlefield_height - y) + @avoid_point_by_pattern[avoid_pattern][:length] * Math::sin((optimize_angle(direction)).to_rad)
+        arrival_time = time + (Math::hypot(logs.last[:x] - avoid_x, logs.last[:y] - (battlefield_height - avoid_y)) / BULLET_VELOCITY).round
+        if Math::hypot(logs.last[:x] - x, logs.last[:y] - (battlefield_height - y)) > SHORT_DISTANCE_THRESHOLD
+          @received_shot_points << {
+            time: time,
+            x: x,
+            y: battlefield_height - y,
+            arrival_time: arrival_time,
+            avoid_pattern: avoid_pattern,
+          }
         end
       end
     end
@@ -179,7 +184,7 @@ class Yamaguchi
         y: avoid_y,
         power: -20,
         expire: arrival_time + 6,
-        bullet_size: diff_energy,
+        bullet_size: diff_energy || 3,
       }
     end
     if (@logs_by_robo[@aim] and @logs_by_robo[@aim].last[:energy].to_f < ASSALT_ATACK_ENERGY_THRESHOLD) or \
@@ -230,7 +235,7 @@ class Yamaguchi
     else
       @acceleration = 1
     end
-    idling = (!@gravity_point['avoid'] or @gravity_point['avoid'][:expire] < time or @gravity_point['avoid'][:bullet_size] < 1.5)
+    idling = (!@gravity_point['avoid'] or @gravity_point['avoid'][:expire] < time or @gravity_point['avoid'][:bullet_size] < BIG_BULLET_SIZE_THRESHOLD)
     @acceleration *= -1 if (idling and @distance and (@distance > SHORT_DISTANCE_THRESHOLD) and ( (speed > 4 and @acceleration == 1) or (speed < -4 and @acceleration == -1) ))
     @turn_direction = round_whithin_range @turn_direction, MIN_ANGLE_OF_ROBO..MAX_ANGLE_OF_ROBO
   end
@@ -373,7 +378,7 @@ class Yamaguchi
     return nil if @attack_ratio_by_pattern[:pattern][:shot] < 5 or @attack_ratio_by_pattern[:reaction][:shot] < 5
     pattern_hit_ratio = @attack_ratio_by_pattern[:pattern][:hit] / @attack_ratio_by_pattern[:pattern][:shot]
     reaction_hit_ratio = @attack_ratio_by_pattern[:reaction][:hit] / @attack_ratio_by_pattern[:reaction][:shot]
-    if (pattern_hit_ratio / reaction_hit_ratio) > 1.6
+    if (pattern_hit_ratio / reaction_hit_ratio) > 1.2
       :reaction
     elsif (reaction_hit_ratio / pattern_hit_ratio) > 1.2
       :pattern

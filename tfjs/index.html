@@ -1,0 +1,81 @@
+<html>
+  <head>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-vis@latest"></script>
+  </head>
+  <body>
+    <h1>tfjs test</h1>
+    <div id="summary"></div>
+    <div id="scatterplot"></div>
+    <div id="fit"></div>
+    <div id="accuracy"></div>
+    <div id="confusion"></div>
+
+    <script>
+      (async () => {
+        // // ---- BLOCK 1 ---
+        // let inputs = tf.tensor2d([0,0,0,1,1,0,1,1], [4,2]);
+        // tfvis.render.scatterplot(
+        //   document.querySelector('#scatterplot'),
+        //   {
+        //     values: inputs.arraySync().map((input) => ({x: input[0], y: input[1]})),
+        //   }, {
+        //     xLabel: 'X',
+        //     yLabel: 'Y',
+        //   }
+        // );
+
+        // // ---- BLOCK 2 ---
+        // let outputs = @@@
+        // let model = tf.sequential();
+        // model.add(tf.layers.dense({inputShape: [2], units: 64, activation: 'relu', useBias: true}));
+        // model.add(tf.layers.dense({units: @@@, activation: 'softmax'}));
+        // model.compile({
+        //   optimizer: tf.train.adam(0.01),
+        //   loss: 'meanSquaredError',
+        //   metrics: ['mse'],
+        // });
+        // tfvis.show.modelSummary(
+        //   document.querySelector('#summary'),
+        //   model
+        // );
+
+        // // ---- BLOCK 3 ---
+        // await model.fit(inputs, outputs, {
+        //   batchSize: 32,
+        //   epochs: 50,
+        //   stepsPerEpoch: 1,
+        //   shuffle: true,
+        //   callbacks: [
+        //     tfvis.show.fitCallbacks(
+        //       document.querySelector('#fit'),
+        //       ['mse', 'loss'],
+        //       { height: 200, width: 400, callbacks: ['onEpochEnd'] }
+        //     )
+        //   ]
+        // });
+
+        // // ---- BLOCK 4 ---
+        // let predicts = model.predict(inputs).argMax(-1);
+        // console.log(predicts.arraySync())
+
+        // // ---- BLOCK 5 ---
+        // let classAccuracy = await tfvis.metrics.perClassAccuracy(outputs.argMax(-1), predicts);
+        // tfvis.show.perClassAccuracy(
+        //   document.querySelector('#accuracy'),
+        //   classAccuracy,
+        //   ['0', '1']
+        // );
+
+        // // ---- BLOCK 6 ---
+        // let confusionMatrix = await tfvis.metrics.confusionMatrix(outputs.argMax(-1), predicts);
+        // tfvis.render.confusionMatrix(
+        //   document.querySelector('#confusion'),
+        //   {
+        //     values: confusionMatrix,
+        //     tickLabels: ['0', '1']
+        //   });
+      })();
+    </script>
+  </body>
+</html>

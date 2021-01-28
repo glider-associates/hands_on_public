@@ -1,5 +1,12 @@
 # learn tsjs 1
 
+## ENV
+```
+nodenv install 10.14.2
+npm install
+```
+
+## require
 ```
 const tf = require('@tensorflow/tfjs-node');
 ```
